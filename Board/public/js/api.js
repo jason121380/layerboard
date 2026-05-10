@@ -90,14 +90,15 @@ export async function generateImages() {
   try {
     const headers = { "Content-Type": "application/json" };
     if (key) headers["X-OpenAI-Key"] = key;
+    const aspectRatio = "square";
     const response = await fetch("/api/generate", {
       method: "POST",
       headers,
       body: JSON.stringify({
         prompt,
-        context: dom.contextInput?.value.trim() || "",
-        style: dom.styleInput?.value || "editorial product moodboard",
-        aspectRatio: dom.ratioInput?.value || "square",
+        context: "",
+        style: "editorial product moodboard",
+        aspectRatio,
         count: 1
       })
     });
@@ -105,7 +106,6 @@ export async function generateImages() {
     if (payload.model && dom.modelLabel) dom.modelLabel.textContent = payload.model;
     if (!response.ok) throw new Error(payload.error || "Image generation failed.");
 
-    const ratioValue = dom.ratioInput?.value || "square";
     const baseX = 1720 + Math.random() * 420;
     const baseY = 690 + Math.random() * 360;
 
@@ -116,8 +116,8 @@ export async function generateImages() {
         fit: "contain",
         x: Math.round(baseX + Math.random() * 360),
         y: Math.round(baseY + Math.random() * 280),
-        width: ratioValue === "portrait" ? 280 : ratioValue === "landscape" ? 420 : 330,
-        height: ratioValue === "portrait" ? 420 : ratioValue === "landscape" ? 280 : 330
+        width: 330,
+        height: 330
       });
     }
     recordImages(payload.images?.length || 1);

@@ -1,16 +1,16 @@
 /**
  * usage.js — local image generation usage tracking.
  *
- * gpt-image-2 pricing (2025):
- *   low  quality 1024×1024 → $0.02
- *   med  quality 1024×1024 → $0.07
- *   high quality 1024×1024 → $0.19
- *   (portrait / landscape ≈ same tier)
- * Default assumed: low quality → $0.02/image
+ * gpt-image-2 uses token-based pricing ($30 / 1M output tokens at 2026-04 launch).
+ * A standard-quality 1024×1024 image ≈ ~1100 output tokens ≈ $0.033.
+ * High quality / larger sizes scale up roughly linearly with pixel count.
+ *
+ * This counter is a *rough* estimate; for exact billing check your OpenAI usage
+ * dashboard. Override the constant if you mostly run high quality or large sizes.
  */
 
 const STORAGE_KEY = "layerboard_usage";
-const PRICE_PER_IMAGE = 0.02; // USD, gpt-image-2 low quality
+const PRICE_PER_IMAGE = 0.04; // USD, rough estimate for gpt-image-2 standard 1024×1024
 
 function load() {
   try {

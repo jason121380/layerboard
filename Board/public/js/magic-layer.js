@@ -215,6 +215,12 @@ function largestComponent(mask, width, height) {
 // Mode 1: Subject (saliency-based foreground / background split)
 // ====================================================================
 
+function getSensitivity() {
+  const v = Number(dom.sensitivityInput?.value);
+  if (Number.isFinite(v)) return v / 100;
+  return 0.5;
+}
+
 function buildSaliencyMask(data, width, height, sensitivity) {
   // Build per-channel float images in LAB.
   const total = width * height;
@@ -285,8 +291,7 @@ function buildSaliencyMask(data, width, height, sensitivity) {
 async function runSubjectMode(selected) {
   const image = await loadImage(selected.src);
   const { data, width, height } = drawToCanvas(image);
-  const sensitivity = Number(dom.sensitivityInput?.value ?? 50) / 100;
-  const subjectMask = buildSaliencyMask(data, width, height, sensitivity);
+  const subjectMask = buildSaliencyMask(data, width, height, getSensitivity());
 
   let subjectArea = 0;
   for (let i = 0; i < subjectMask.length; i += 1) subjectArea += subjectMask[i];
@@ -385,9 +390,8 @@ function kmeans(samples, k) {
 }
 
 function pickK() {
-  // Slider value 18..96 → k = 3..8
-  const v = Number(dom.sensitivityInput?.value ?? 60);
-  const ratio = (v - 18) / 78;
+  // Sensitivity 0..1 → k = 3..8
+  const ratio = getSensitivity();
   return Math.min(8, Math.max(3, 3 + Math.round(ratio * 5)));
 }
 
@@ -541,8 +545,19 @@ function captionFor(layer, base, index, total) {
   return `${base || "圖層"} ${index + 1}/${total}`;
 }
 
+async function runForMode(selected, mode) {
+  if (mode === "palette") return runPaletteMode(selected);
+  if (mode === "text") return runTextGraphMode(selected);
+  return runSubjectMode(selected);
+}
+
 async function splitItemIntoLayers(selected) {
-  const layers = await runTextGraphMode(selected);
+  const mode = state.layerMode || "subject";
+  let layers = await runForMode(selected, mode);
+  // Subject mode can return empty for low-contrast images — fall back to palette.
+  if (!layers.length && mode === "subject") {
+    layers = await runPaletteMode(selected);
+  }
 
   if (!layers.length) return { group: null, layers: [] };
 
