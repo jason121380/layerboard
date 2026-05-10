@@ -1,0 +1,15 @@
+{
+  "name": "layerboard",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Layerboard — local-first AI moodboard with Magic Layer extraction.",
+  "scripts": {
+    "dev": "node --watch server.js",
+    "start": "node server.js",
+    "check": "node --check server.js && find public/js -name '*.js' -exec node --check {} \\;"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

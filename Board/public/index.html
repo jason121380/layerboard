@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Layerboard | Creative Workspace</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <!-- ===== Top bar ===== -->
+      <header class="canvas-topbar">
+        <a href="/" class="logo-link" aria-label="Layerboard home">
+          <img src="/logo.png" alt="Layerboard" class="logo" />
+        </a>
+        <span class="topbar-sep" aria-hidden="true"></span>
+        <div class="status-chip" aria-live="polite">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="modelLabel">gpt-image-2</span>
+          <span id="usageLabel" class="usage-label" hidden></span>
+        </div>
+        <button id="gridToggleBtn" class="topbar-icon-btn" type="button" title="顯示/隱藏格線" aria-label="Toggle grid" aria-pressed="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+          </svg>
+        </button>
+      </header>
+
+      <!-- ===== API Key Modal ===== -->
+      <div id="apiKeyModal" class="api-modal" role="dialog" aria-modal="true" aria-label="Set API Key" hidden>
+        <div class="api-modal-card">
+          <p class="api-modal-title">OpenAI API Key</p>
+          <input id="apiKeyInput" class="api-modal-input" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false" />
+          <div class="api-modal-actions">
+            <button id="apiKeySave" class="api-modal-save" type="button">儲存</button>
+            <button id="apiKeyCancel" class="api-modal-cancel" type="button">取消</button>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ===== Workspace ===== -->
+      <main class="workspace">
+        <section class="board-frame" aria-label="Moodboard canvas">
+          <div id="board" class="board">
+            <div class="grid-lines" aria-hidden="true"></div>
+          </div>
+          <div id="toast" class="toast" role="status" aria-live="polite"></div>
+        </section>
+      </main>
+
+      <!-- ===== Selection bar ===== -->
+      <section id="selectionBar" class="selection-bar" aria-label="Selected actions">
+        <span><strong id="selectedCount">0</strong> 已選取</span>
+        <!-- single-select actions -->
+        <button id="magicBtn" type="button" disabled>魔法圖層</button>
+        <button id="revertBtn" type="button" disabled>還原圖層</button>
+        <button id="duplicateBtn" type="button" disabled>複製</button>
+        <button id="exportBtn" type="button" disabled>匯出</button>
+        <!-- multi-select actions -->
+        <button id="groupBtn" type="button" disabled>群組</button>
+        <button id="ungroupBtn" type="button" disabled>解散群組</button>
+        <button id="mergeBtn" type="button" disabled>合併圖層</button>
+        <!-- always -->
+        <button id="deleteBtn" type="button" disabled>刪除</button>
+      </section>
+
+      <!-- ===== Mixer card (prompt panel) ===== -->
+      <section class="mixer-card visible" aria-label="Mixboard prompt">
+        <div class="mixer-input-row">
+          <textarea id="promptInput" rows="1" placeholder="你想要生成什麼呢"></textarea>
+          <button id="uploadBtn" class="mixer-icon-btn" type="button" title="Upload image" aria-label="Upload image">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </button>
+          <button id="generateBtn" class="send-button" type="button" aria-label="Generate image">
+            <span>→</span>
+          </button>
+        </div>
+        <input id="fileInput" type="file" accept="image/*" multiple hidden />
+      </section>
+
+    </div>
+
+    <!-- ===== Item template ===== -->
+    <template id="itemTemplate">
+      <article class="board-item" tabindex="0">
+        <div class="item-media"></div>
+        <div class="item-caption"></div>
+        <button class="resize-handle" type="button" aria-label="Resize item"></button>
+      </article>
+    </template>
+
+    <script src="/js/main.js" type="module"></script>
+  </body>
+</html>
