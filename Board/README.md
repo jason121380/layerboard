@@ -25,7 +25,7 @@ npm run dev
 | 名稱 | 預設值 | 說明 |
 |---|---|---|
 | `OPENAI_API_KEY` | _(選填)_ | OpenAI 金鑰；未設定時前端可由右上角 chip 自行輸入並存到 localStorage（透過 `X-OpenAI-Key` 標頭傳給伺服器）|
-| `OPENAI_IMAGE_MODEL` | `gpt-image-1` | 影像模型名稱；OpenAI 推出新版本時只改這個變數 |
+| `OPENAI_IMAGE_MODEL` | `gpt-image-2` | 影像模型名稱（2026/04 起官方推薦）；要降級到 `gpt-image-1` / `gpt-image-1-mini` / `gpt-image-1.5` 改這個變數即可 |
 | `PORT` | `3000` | 伺服器埠號（Zeabur 等平台會自動注入）|
 | `HOST` | `0.0.0.0` | 監聽位址；容器/PaaS 部署需保持 `0.0.0.0` |
 
