@@ -1,7 +1,7 @@
 /**
  * usage.js — local image generation usage tracking.
  *
- * gpt-image-2 pricing (2025):
+ * gpt-image-1 pricing (2025):
  *   low  quality 1024×1024 → $0.02
  *   med  quality 1024×1024 → $0.07
  *   high quality 1024×1024 → $0.19
@@ -10,7 +10,7 @@
  */
 
 const STORAGE_KEY = "layerboard_usage";
-const PRICE_PER_IMAGE = 0.02; // USD, gpt-image-2 low quality
+const PRICE_PER_IMAGE = 0.02; // USD, gpt-image-1 low quality
 
 function load() {
   try {

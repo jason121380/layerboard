@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.zeabur.com/config.json",
+  "name": "layerboard",
+  "build": {
+    "type": "node",
+    "command": "echo 'no build step'"
+  },
+  "start": {
+    "command": "node server.js"
+  },
+  "ports": [
+    { "id": "web", "port": 3000, "type": "HTTP" }
+  ],
+  "healthcheck": {
+    "type": "http",
+    "path": "/api/health",
+    "port": 3000,
+    "intervalSeconds": 30,
+    "timeoutSeconds": 5
+  }
+}

@@ -6,8 +6,9 @@ import { fileURLToPath } from "node:url";
 // ---------- Config ----------
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, "public");
+const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT) || 3000;
-const IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || "gpt-image-2";
+const IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || "gpt-image-1";
 const MAX_BODY_BYTES = 1_000_000;
 const MAX_GEN_COUNT = 4;
 
@@ -162,6 +163,14 @@ function handleHealth(_req, res) {
   });
 }
 
+function cacheControlFor(ext) {
+  if (ext === ".html") return "no-cache";
+  if ([".js", ".mjs", ".css", ".png", ".jpg", ".jpeg", ".svg", ".webp", ".ico"].includes(ext)) {
+    return "public, max-age=300, must-revalidate";
+  }
+  return "no-store";
+}
+
 async function handleStatic(req, res) {
   const requestUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   const decoded = decodeURIComponent(requestUrl.pathname);
@@ -176,10 +185,11 @@ async function handleStatic(req, res) {
 
   try {
     const file = await readFile(filePath);
-    const contentType = MIME_TYPES[path.extname(filePath)] || "application/octet-stream";
+    const ext = path.extname(filePath);
+    const contentType = MIME_TYPES[ext] || "application/octet-stream";
     res.writeHead(200, {
       "Content-Type": contentType,
-      "Cache-Control": "no-store",
+      "Cache-Control": cacheControlFor(ext),
       ...SECURITY_HEADERS
     });
     res.end(file);
@@ -218,10 +228,26 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`Layerboard is running at http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`Layerboard listening on http://${HOST}:${PORT}`);
   console.log(`OpenAI image model: ${IMAGE_MODEL}`);
   if (!process.env.OPENAI_API_KEY) {
     console.warn("⚠  OPENAI_API_KEY is not set. /api/generate will return 400.");
   }
 });
+
+// Graceful shutdown for platform redeploys (Zeabur/Docker send SIGTERM).
+function shutdown(signal) {
+  console.log(`Received ${signal}, closing server…`);
+  server.close((err) => {
+    if (err) {
+      console.error("Error during shutdown:", err);
+      process.exit(1);
+    }
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(1), 10_000).unref();
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
