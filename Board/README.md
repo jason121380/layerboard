@@ -5,7 +5,7 @@
 ## 主要功能
 
 - **AI 生成**：`POST /api/generate` 透過 OpenAI Images API 產出畫布素材
-- **Magic Layer**：把任一張圖片拆成可獨立操作的 Object Layers 或 Color Layers
+- **Magic Layer**：把任一張圖片拆成 ① OCR 出來的「真正的可編輯文字」（系統預設字型）+ ② Subject layer + ③ Background layer。也可切換 palette / 純文字-圖形模式
 - **多選操作**：框選、Shift / ⌘ 加選；多選後可一起移動、縮放、Duplicate、Delete、Magic Layer
 - **拖放上傳**：把任何圖片從桌面拖進畫布即可加入
 - **匯出 PNG**：把整張 board 拼合輸出
@@ -98,7 +98,9 @@ npm run dev
 
 ## 開發備註
 
-- 沒有外部相依套件——可直接 `node server.js` 啟動
+- 沒有 npm 相依套件——可直接 `node server.js` 啟動
 - 前端使用 ES Modules（`<script type="module">`），需要現代瀏覽器
-- Magic Layer 的主體分割使用 frequency-tuned saliency + Otsu 自動閾值 + 形態學開閉 + 最大連通元件；色彩分割使用 LAB k-means++（純前端 Canvas，無 ML 依賴）
-- 分層模式由 `state.layerMode` 控制（`subject` / `palette` / `text`），預設 `subject`；想要 Canva Magic Layer 等級的精度，可自行接 Replicate SAM / fal.ai BiRefNet 等外部模型作為 `runForMode` 的新 case
+- 主體分割使用 frequency-tuned saliency + Otsu 自動閾值 + 形態學開閉 + 最大連通元件；色彩分割使用 LAB k-means++（純前端 Canvas）
+- **OCR 文字成為真文字**：點擊 Magic Layer 時動態載入 [Tesseract.js](https://tesseract.projectnaptha.com/)（CDN，~3 MB script + 首次下載 ~10 MB 中英文字典，瀏覽器會 cache）。每行 OCR 結果自動成為一個 `type: "text"` item，採用系統預設字型；文字顏色由 bbox 內 Otsu 取樣推得。**雙擊**進入編輯、單擊則拖曳
+- 分層模式由 `state.layerMode` 控制（`auto` / `subject` / `palette` / `text`），預設 `auto`（OCR + 主體 + 背景）
+- 想升級成 Canva Magic Layer 等級的物件分割精度，可在 `runForMode` 加一個 case 串 Replicate SAM2 / fal.ai BiRefNet 等外部模型

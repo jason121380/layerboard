@@ -762,6 +762,54 @@ textarea, select, input[type="range"] { width: 100%; }
   background: rgba(255, 255, 255, 0.72);
 }
 
+.board-item.text-item {
+  min-height: 0;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  border-radius: 2px;
+}
+
+.board-item.text-item:hover { border-color: rgba(150, 92, 255, 0.35); }
+
+.board-item.text-item.selected {
+  border-color: var(--violet);
+  box-shadow: 0 0 0 2px rgba(150, 92, 255, 0.22);
+}
+
+.board-item.text-item .item-media {
+  display: block;
+  overflow: hidden;
+}
+
+.board-item.text-item [data-role="text-editor"] {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  white-space: pre-wrap;
+  overflow: hidden;
+  cursor: grab;
+  line-height: 1.05;
+  display: flex;
+  align-items: center;
+  word-break: keep-all;
+}
+
+.board-item.text-item [data-role="text-editor"][contenteditable="true"] {
+  cursor: text;
+  background: rgba(255, 255, 255, 0.7);
+  outline: 1px dashed rgba(150, 92, 255, 0.6);
+  outline-offset: 2px;
+}
+
+.board-item.text-item .resize-handle { opacity: 0; transition: opacity 120ms ease; }
+.board-item.text-item:hover .resize-handle,
+.board-item.text-item.selected .resize-handle { opacity: 0.85; }
+
 .selection-box {
   position: absolute;
   z-index: 9999;

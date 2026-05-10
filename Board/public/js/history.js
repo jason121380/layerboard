@@ -21,7 +21,11 @@ function snap() {
     z: item.z,
     layerGroup: item.layerGroup || null,
     groupId: item.groupId || null,
-    sourceId: item.sourceId || null
+    sourceId: item.sourceId || null,
+    fontSize: item.fontSize ?? null,
+    color: item.color ?? null,
+    fontFamily: item.fontFamily ?? null,
+    fontWeight: item.fontWeight ?? null
   }));
 }
 

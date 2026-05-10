@@ -1,17 +1,17 @@
 /**
- * magic-layer.js — perceptual image segmentation.
+ * magic-layer.js — perceptual image segmentation + OCR text extraction.
  *
- * Two modes:
- *   - "subject": frequency-tuned saliency in LAB space → Otsu threshold →
- *                morphological cleanup → largest connected region
- *                Output: subject layer (alpha-cut) + background layer (subject removed)
+ * Modes (set via state.layerMode):
+ *   - "auto"    (default): OCR every readable text line → editable text items
+ *               in the system default font, then saliency split the rest into
+ *               subject + background. Most "Magic Layer"-like.
+ *   - "subject": frequency-tuned saliency in LAB → Otsu → morphology →
+ *               largest connected region. Subject + background only.
+ *   - "palette": k-means in LAB → k color layers ordered by area.
+ *   - "text"   : Sobel edge density → text-vs-graph split (image only).
  *
- *   - "palette": stratified-sample → k-means in LAB color space (k-means++ seed) →
- *                assign every pixel to nearest centroid → emit k color layers
- *                Output: k alpha-cut layers, ordered by area, named by hex
- *
- * Both modes produce clean alpha-cut layers (no jagged bounding boxes),
- * dramatically better than the previous threshold-based implementation.
+ * OCR is loaded lazily from the Tesseract.js CDN; if it fails we fall back to
+ * subject mode silently.
  */
 
 import { state, dom, bumpZ, showToast } from "./state.js";
@@ -37,6 +37,10 @@ import {
 const MAX_PROCESS_SIDE = 720;
 const KMEANS_SAMPLE_SIZE = 8000;
 const KMEANS_MAX_ITER = 14;
+
+const TESSERACT_CDN = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+const OCR_LANGS = ["eng", "chi_tra"];
+const OCR_MIN_CONFIDENCE = 55;
 
 // ====================================================================
 // Shared helpers
@@ -537,7 +541,7 @@ async function runTextGraphMode(selected) {
 }
 
 function captionFor(layer, base, index, total) {
-  if (layer.kind === "text") return "文字";
+  if (layer.kind === "text") return (layer.text || "文字").slice(0, 24);
   if (layer.kind === "graph") return "圖形";
   if (layer.kind === "subject") return `${base || "主體"}`;
   if (layer.kind === "background") return `${base || "主體"} · 背景`;
@@ -545,17 +549,203 @@ function captionFor(layer, base, index, total) {
   return `${base || "圖層"} ${index + 1}/${total}`;
 }
 
+// ====================================================================
+// Mode 4: Auto — OCR text → editable text items + saliency subject/bg
+// ====================================================================
+
+let tesseractScriptPromise = null;
+let tesseractWorkerPromise = null;
+
+function loadTesseractScript() {
+  if (typeof window === "undefined") return Promise.reject(new Error("no window"));
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (tesseractScriptPromise) return tesseractScriptPromise;
+  tesseractScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = TESSERACT_CDN;
+    script.crossOrigin = "anonymous";
+    script.referrerPolicy = "no-referrer";
+    script.onload = () => (window.Tesseract ? resolve(window.Tesseract) : reject(new Error("Tesseract global missing")));
+    script.onerror = () => reject(new Error("Tesseract CDN load failed"));
+    document.head.append(script);
+  });
+  return tesseractScriptPromise;
+}
+
+async function getOcrWorker() {
+  if (tesseractWorkerPromise) return tesseractWorkerPromise;
+  tesseractWorkerPromise = (async () => {
+    const Tesseract = await loadTesseractScript();
+    return Tesseract.createWorker(OCR_LANGS, 1);
+  })().catch((err) => {
+    tesseractWorkerPromise = null;
+    throw err;
+  });
+  return tesseractWorkerPromise;
+}
+
+/** Sample the dominant text colour inside a bbox via Otsu split on luminance. */
+function sampleTextColor(data, width, height, bbox) {
+  const x0 = Math.max(0, Math.floor(bbox.x0));
+  const y0 = Math.max(0, Math.floor(bbox.y0));
+  const x1 = Math.min(width - 1, Math.ceil(bbox.x1));
+  const y1 = Math.min(height - 1, Math.ceil(bbox.y1));
+  if (x1 <= x0 || y1 <= y0) return "#26252a";
+
+  const lums = [];
+  const colors = [];
+  for (let y = y0; y <= y1; y += 1) {
+    for (let x = x0; x <= x1; x += 1) {
+      const i = (y * width + x) * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+      lums.push(Math.round(lum));
+      colors.push([r, g, b, lum]);
+    }
+  }
+  if (!colors.length) return "#26252a";
+
+  const threshold = otsuThreshold(lums);
+  let darkR = 0, darkG = 0, darkB = 0, darkN = 0;
+  let lightR = 0, lightG = 0, lightB = 0, lightN = 0;
+  for (const [r, g, b, lum] of colors) {
+    if (lum < threshold) { darkR += r; darkG += g; darkB += b; darkN += 1; }
+    else { lightR += r; lightG += g; lightB += b; lightN += 1; }
+  }
+  // Text class is usually the smaller pixel population inside its line bbox.
+  const useDark = darkN > 0 && (darkN <= lightN || lightN === 0);
+  const n = useDark ? darkN : lightN;
+  if (!n) return "#26252a";
+  const r = Math.round((useDark ? darkR : lightR) / n);
+  const g = Math.round((useDark ? darkG : lightG) / n);
+  const b = Math.round((useDark ? darkB : lightB) / n);
+  return rgbToHex(r, g, b);
+}
+
+/**
+ * Run OCR on the source image (at natural resolution for accuracy), then
+ * return text payloads in *processed-canvas* coords so they line up with
+ * masks built by other passes.
+ */
+async function ocrExtract(image, data, width, height) {
+  let worker;
+  try {
+    worker = await getOcrWorker();
+  } catch (err) {
+    console.warn("[magic-layer] OCR unavailable:", err.message);
+    return { items: [], bboxes: [] };
+  }
+
+  const ocrCanvas = document.createElement("canvas");
+  ocrCanvas.width = image.naturalWidth;
+  ocrCanvas.height = image.naturalHeight;
+  ocrCanvas.getContext("2d").drawImage(image, 0, 0);
+
+  let result;
+  try {
+    result = await worker.recognize(ocrCanvas);
+  } catch (err) {
+    console.warn("[magic-layer] OCR recognise failed:", err.message);
+    return { items: [], bboxes: [] };
+  }
+
+  const lines = result?.data?.lines || [];
+  const scale = width / image.naturalWidth; // natural → processed coord scale
+
+  const items = [];
+  const bboxes = [];
+  for (const line of lines) {
+    const text = (line.text || "").replace(/\s+$/g, "");
+    if (!text || text.trim().length < 2) continue;
+    if ((line.confidence ?? 0) < OCR_MIN_CONFIDENCE) continue;
+
+    const x0 = Math.max(0, Math.round(line.bbox.x0 * scale));
+    const y0 = Math.max(0, Math.round(line.bbox.y0 * scale));
+    const x1 = Math.min(width, Math.round(line.bbox.x1 * scale));
+    const y1 = Math.min(height, Math.round(line.bbox.y1 * scale));
+    const w = x1 - x0;
+    const h = y1 - y0;
+    if (w < 6 || h < 6) continue;
+
+    const color = sampleTextColor(data, width, height, { x0, y0, x1, y1 });
+
+    items.push({
+      kind: "text",
+      x: x0,
+      y: y0,
+      width: w,
+      height: h,
+      text,
+      // 0.78 of bbox height matches the typical cap-height ratio of latin/CJK fonts.
+      fontSize: Math.max(6, h * 0.78),
+      color
+    });
+    bboxes.push({ x0, y0, x1, y1 });
+  }
+
+  return { items, bboxes };
+}
+
+/** Zero out a mask wherever a text bbox overlaps. */
+function maskOutBboxes(mask, width, height, bboxes, padding = 2) {
+  for (const bbox of bboxes) {
+    const x0 = Math.max(0, bbox.x0 - padding);
+    const y0 = Math.max(0, bbox.y0 - padding);
+    const x1 = Math.min(width - 1, bbox.x1 + padding);
+    const y1 = Math.min(height - 1, bbox.y1 + padding);
+    for (let y = y0; y <= y1; y += 1) {
+      for (let x = x0; x <= x1; x += 1) {
+        mask[y * width + x] = 0;
+      }
+    }
+  }
+}
+
+async function runAutoMode(selected) {
+  const image = await loadImage(selected.src);
+  const { data, width, height } = drawToCanvas(image);
+
+  const { items: textItems, bboxes: textBboxes } = await ocrExtract(image, data, width, height);
+
+  const subjectMask = buildSaliencyMask(data, width, height, getSensitivity());
+  if (textBboxes.length) maskOutBboxes(subjectMask, width, height, textBboxes, 2);
+
+  let subjectArea = 0;
+  for (let i = 0; i < subjectMask.length; i += 1) subjectArea += subjectMask[i];
+  const subjectFraction = subjectArea / subjectMask.length;
+
+  const out = textItems.map((t) => ({ ...t, sourceWidth: width, sourceHeight: height }));
+
+  // Only emit subject/background when there's a meaningful subject AND something
+  // wasn't already covered by text (e.g. text-heavy posters get text only).
+  if (subjectFraction > 0.005) {
+    const subjectLayer = maskToLayer(data, width, height, subjectMask);
+    if (subjectLayer) out.push({ ...subjectLayer, kind: "subject", sourceWidth: width, sourceHeight: height });
+
+    const backgroundMask = new Uint8Array(subjectMask.length);
+    for (let i = 0; i < subjectMask.length; i += 1) backgroundMask[i] = subjectMask[i] ? 0 : 1;
+    if (textBboxes.length) maskOutBboxes(backgroundMask, width, height, textBboxes, 2);
+    const backgroundLayer = maskToLayer(data, width, height, backgroundMask);
+    if (backgroundLayer) out.push({ ...backgroundLayer, kind: "background", sourceWidth: width, sourceHeight: height });
+  }
+
+  return out;
+}
+
 async function runForMode(selected, mode) {
+  if (mode === "auto") return runAutoMode(selected);
   if (mode === "palette") return runPaletteMode(selected);
   if (mode === "text") return runTextGraphMode(selected);
   return runSubjectMode(selected);
 }
 
 async function splitItemIntoLayers(selected) {
-  const mode = state.layerMode || "subject";
+  const mode = state.layerMode || "auto";
   let layers = await runForMode(selected, mode);
-  // Subject mode can return empty for low-contrast images — fall back to palette.
-  if (!layers.length && mode === "subject") {
+  // Auto/subject can return empty for low-contrast images — fall back to palette.
+  if (!layers.length && (mode === "auto" || mode === "subject")) {
     layers = await runPaletteMode(selected);
   }
 
@@ -565,8 +755,24 @@ async function splitItemIntoLayers(selected) {
   const scaleX = selected.width / layers[0].sourceWidth;
   const scaleY = selected.height / layers[0].sourceHeight;
 
-  const created = layers.map((layer, index) =>
-    createItem({
+  const created = layers.map((layer, index) => {
+    if (layer.kind === "text") {
+      return createItem({
+        type: "text",
+        text: layer.text,
+        caption: captionFor(layer, selected.caption, index, layers.length),
+        x: Math.round(selected.x + layer.x * scaleX),
+        y: Math.round(selected.y + layer.y * scaleY),
+        width: Math.max(48, Math.round(layer.width * scaleX)),
+        height: Math.max(14, Math.round(layer.height * scaleY)),
+        fontSize: Math.max(10, Math.round(layer.fontSize * scaleY)),
+        color: layer.color,
+        layerGroup: group,
+        sourceId: selected.id,
+        select: false
+      });
+    }
+    return createItem({
       type: "layer",
       src: layer.src,
       caption: captionFor(layer, selected.caption, index, layers.length),
@@ -578,8 +784,8 @@ async function splitItemIntoLayers(selected) {
       layerGroup: group,
       sourceId: selected.id,
       select: false
-    })
-  );
+    });
+  });
 
   selected.visible = false;
   syncItemElement(selected);
@@ -598,6 +804,12 @@ export async function magicLayerSelected() {
     dom.magicBtn.textContent = "拆解中…";
   }
 
+  // First-run hint: OCR engine is ~3MB script + ~10MB language data on cold start.
+  const mode = state.layerMode || "auto";
+  if (mode === "auto" && !window.Tesseract) {
+    showToast("首次拆解：OCR 引擎下載中（約 10–15 MB），完成後會更快…");
+  }
+
   try {
     const createdLayers = [];
     let lastGroup = null;
@@ -608,13 +820,18 @@ export async function magicLayerSelected() {
     }
 
     if (!createdLayers.length) {
-      showToast("沒有分出可用的圖層。試試另一個模式或調整 sensitivity。");
+      showToast("沒有分出可用的圖層。試試別張圖或調整 sensitivity。");
       return;
     }
 
     selectItems(createdLayers.map((layer) => layer.id));
     renderLayerPanel(targets.length === 1 ? lastGroup : null);
-    showToast(`已從 ${targets.length} 張圖拆出 ${createdLayers.length} 個圖層。`);
+    const textCount = createdLayers.filter((l) => l.type === "text").length;
+    const layerCount = createdLayers.length - textCount;
+    const summary = textCount
+      ? `拆出 ${textCount} 段可編輯文字${layerCount ? ` + ${layerCount} 個圖層` : ""}。`
+      : `從 ${targets.length} 張圖拆出 ${createdLayers.length} 個圖層。`;
+    showToast(summary);
   } catch (error) {
     showToast(error.message);
   } finally {

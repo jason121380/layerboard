@@ -153,6 +153,51 @@ export function syncItemElement(item) {
   item.el.style.opacity = item.opacity ?? 1;
   item.el.style.display = item.visible === false ? "none" : "block";
   item.el.classList.toggle("layer-item", item.type === "layer");
+  item.el.classList.toggle("text-item", item.type === "text");
+}
+
+const DEFAULT_TEXT_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Inter, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif';
+
+function renderTextItem(item, media) {
+  const editor = document.createElement("div");
+  editor.dataset.role = "text-editor";
+  editor.contentEditable = "false";
+  editor.spellcheck = false;
+  editor.textContent = item.text || "";
+  Object.assign(editor.style, {
+    fontSize: `${item.fontSize || 24}px`,
+    fontFamily: item.fontFamily || DEFAULT_TEXT_FONT,
+    fontWeight: String(item.fontWeight || 600),
+    color: item.color || "#26252a"
+  });
+
+  editor.addEventListener("input", () => {
+    item.text = editor.textContent;
+  });
+
+  // Double-click → enter edit mode (single-click stays for select+drag).
+  item.el.addEventListener("dblclick", (e) => {
+    e.stopPropagation();
+    editor.contentEditable = "true";
+    editor.focus();
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  });
+
+  editor.addEventListener("blur", () => {
+    editor.contentEditable = "false";
+    item.text = editor.textContent;
+  });
+
+  editor.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") editor.blur();
+  });
+
+  media.append(editor);
 }
 
 function renderItemContent(item) {
@@ -160,6 +205,11 @@ function renderItemContent(item) {
   const caption = item.el.querySelector(".item-caption");
   media.innerHTML = "";
   caption.textContent = item.caption || "";
+
+  if (item.type === "text") {
+    renderTextItem(item, media);
+    return;
+  }
 
   if (item.type === "note") {
     const textarea = document.createElement("textarea");
@@ -199,7 +249,11 @@ export function createItem(data) {
     el: node,
     layerGroup: data.layerGroup || null,
     groupId: data.groupId || null,
-    sourceId: data.sourceId || null
+    sourceId: data.sourceId || null,
+    fontSize: data.fontSize ?? null,
+    color: data.color ?? null,
+    fontFamily: data.fontFamily ?? null,
+    fontWeight: data.fontWeight ?? null
   };
 
   node.dataset.id = item.id;
@@ -221,7 +275,10 @@ export function createItem(data) {
 
 // ---------- Drag & resize ----------
 function handleItemPointerDown(event, item) {
-  if (event.target.closest(".resize-handle") || event.target.tagName === "TEXTAREA") return;
+  if (event.target.closest(".resize-handle")) return;
+  if (event.target.tagName === "TEXTAREA") return;
+  // Allow caret placement when a text item is in edit mode.
+  if (event.target.isContentEditable) return;
   event.preventDefault();
 
   const shouldToggle = event.shiftKey || event.metaKey || event.ctrlKey;
