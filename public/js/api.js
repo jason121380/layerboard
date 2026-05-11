@@ -276,9 +276,11 @@ export async function generateImages() {
   }
 
   const key = getApiKey();
-  // Static deploy needs the user's key to call OpenAI directly.
-  if (state.hasBackend === false && !key) {
-    showToast("靜態模式：請先點左下角輸入 OpenAI Key。");
+  // Default to direct OpenAI call unless we've definitively detected a backend.
+  // (null = probe still running / failed → safer to assume static.)
+  const useBackend = state.hasBackend === true;
+  if (!useBackend && !key) {
+    showToast("請先點左下角輸入 OpenAI Key。");
     return;
   }
 
@@ -314,13 +316,25 @@ export async function generateImages() {
   const aspectRatio = state.aspectRatio || "square";
 
   try {
-    const payload =
-      state.hasBackend === false
-        ? await generateDirect(prompt, key, referenceSrcs, aspectRatio)
-        : await generateViaBackend(prompt, key, referenceSrcs, aspectRatio);
+    let payload;
+    if (useBackend) {
+      try {
+        payload = await generateViaBackend(prompt, key, referenceSrcs, aspectRatio);
+      } catch (err) {
+        // 404 or network failure → backend isn't there, fall back to direct.
+        if (/404|fetch|failed/i.test(err.message) && key) {
+          state.hasBackend = false;
+          payload = await generateDirect(prompt, key, referenceSrcs, aspectRatio);
+        } else {
+          throw err;
+        }
+      }
+    } else {
+      payload = await generateDirect(prompt, key, referenceSrcs, aspectRatio);
+    }
 
     if (payload.model && dom.modelLabel) {
-      const suffix = state.hasBackend === false ? " · Static" : "";
+      const suffix = state.hasBackend === true ? "" : " · Static";
       dom.modelLabel.textContent = `${payload.model}${suffix}`;
     }
 
