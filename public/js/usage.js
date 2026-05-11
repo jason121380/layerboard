@@ -25,7 +25,10 @@ export function formatTwd(usd) {
 
 function load() {
   try {
-    return JSON.parse(localStorage.getItem(storageKey())) || { count: 0, usd: 0 };
+    let raw = localStorage.getItem(storageKey());
+    // Legacy fallback: pre-namespace data was stored at the un-suffixed key.
+    if (!raw) raw = localStorage.getItem("layerboard_usage");
+    return JSON.parse(raw) || { count: 0, usd: 0 };
   } catch {
     return { count: 0, usd: 0 };
   }
@@ -33,6 +36,8 @@ function load() {
 
 function save(data) {
   localStorage.setItem(storageKey(), JSON.stringify(data));
+  // Migrate away — once new data is saved we don't need the legacy key.
+  localStorage.removeItem("layerboard_usage");
 }
 
 export function recordImages(n = 1, priceEach = PRICE_PER_IMAGE) {

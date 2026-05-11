@@ -9,7 +9,10 @@ function logKey() { return namespaced("layerboard_generation_log"); }
 
 export function readLog() {
   try {
-    return JSON.parse(localStorage.getItem(logKey()) || "[]");
+    let raw = localStorage.getItem(logKey());
+    // Legacy fallback: pre-namespace logs lived at the un-suffixed key.
+    if (!raw) raw = localStorage.getItem("layerboard_generation_log");
+    return JSON.parse(raw || "[]");
   } catch {
     return [];
   }
@@ -18,6 +21,7 @@ export function readLog() {
 function writeLog(entries) {
   try {
     localStorage.setItem(logKey(), JSON.stringify(entries.slice(0, MAX_ENTRIES)));
+    localStorage.removeItem("layerboard_generation_log");
   } catch {
     // Likely quota exceeded — drop the oldest entries until it fits.
     try {
