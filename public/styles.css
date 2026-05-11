@@ -1386,3 +1386,107 @@ textarea, select, input[type="range"] { width: 100%; }
 
   .layer-popover { display: none; }
 }
+
+/* ---------- Phones (≤600px) ---------- */
+@media (max-width: 600px) {
+  .canvas-topbar {
+    inset: 0 0 auto 0;
+    height: 48px;
+    padding: 0 10px;
+    gap: 6px;
+  }
+
+  /* Prevent any topbar child from collapsing into wrap, except the spacer. */
+  .canvas-topbar > * { flex-shrink: 0; }
+  .topbar-sep { flex: 1; min-width: 0; flex-shrink: 1; }
+
+  .logo { height: 28px; }
+
+  .topbar-icon-btn {
+    width: 32px;
+    height: 32px;
+    margin-right: 4px;
+  }
+
+  .canvas-topbar .status-chip {
+    height: 32px;
+    margin-right: 4px;
+    padding: 0 8px 0 8px;
+    gap: 6px;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    max-width: 60vw;
+  }
+
+  .canvas-topbar .status-chip > * {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  #modelLabel {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 22vw;
+  }
+
+  .usage-label {
+    margin-left: 4px;
+    padding-left: 6px;
+    font-size: 10px;
+  }
+
+  .mixer-card {
+    width: calc(100vw - 16px);
+    bottom: 12px;
+    padding: 8px;
+    border-radius: 24px;
+  }
+
+  .mixer-input-row { gap: 6px; }
+
+  #promptInput {
+    font-size: 14px;
+    min-width: 0;
+  }
+
+  .mixer-icon-btn,
+  .send-button {
+    flex-shrink: 0;
+  }
+
+  .selection-bar {
+    width: calc(100vw - 16px);
+    padding: 6px 8px;
+    gap: 6px;
+    font-size: 12px;
+  }
+
+  .selection-bar button {
+    padding: 0 10px;
+    height: 30px;
+    font-size: 12px;
+  }
+
+  .api-modal-card {
+    width: min(400px, calc(100vw - 24px));
+    padding: 18px;
+  }
+}
+
+/* ---------- Narrow phones (≤380px) ---------- */
+@media (max-width: 380px) {
+  .canvas-topbar { padding: 0 8px; }
+
+  .logo { height: 26px; }
+
+  /* On very narrow screens the model name is redundant — chip still shows the dot
+     and the usage label (1 張 · NT$ X), which is the user-actionable info. */
+  .canvas-topbar #modelLabel { display: none; }
+
+  .canvas-topbar .status-chip .usage-label {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: none;
+  }
+}
