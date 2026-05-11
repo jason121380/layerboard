@@ -5,12 +5,21 @@
  * A standard-quality 1024×1024 image ≈ ~1100 output tokens ≈ $0.033.
  * High quality / larger sizes scale up roughly linearly with pixel count.
  *
- * This counter is a *rough* estimate; for exact billing check your OpenAI usage
- * dashboard. Override the constant if you mostly run high quality or large sizes.
+ * Storage stays in USD (data.usd) so a future rate change doesn't break old
+ * records; display converts to TWD on the fly.
  */
 
 const STORAGE_KEY = "layerboard_usage";
-const PRICE_PER_IMAGE = 0.04; // USD, rough estimate for gpt-image-2 standard 1024×1024
+const PRICE_PER_IMAGE = 0.04;   // USD, rough estimate for gpt-image-2 standard 1024×1024
+export const USD_TO_TWD = 32;    // Fixed conversion rate; update if needed.
+
+export function usdToTwd(usd) {
+  return Math.round(usd * USD_TO_TWD);
+}
+
+export function formatTwd(usd) {
+  return `NT$ ${usdToTwd(usd).toLocaleString("zh-TW")}`;
+}
 
 function load() {
   try {
@@ -41,5 +50,7 @@ export function renderUsage() {
     return;
   }
   label.hidden = false;
-  label.textContent = `${data.count} 張 · $${data.usd.toFixed(2)}`;
+  // Show TWD with at least NT$ 1 so single-image runs aren't displayed as NT$ 0.
+  const twd = Math.max(1, usdToTwd(data.usd));
+  label.textContent = `${data.count} 張 · NT$ ${twd.toLocaleString("zh-TW")}`;
 }
