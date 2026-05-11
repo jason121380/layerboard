@@ -248,19 +248,31 @@ function bindEvents() {
 
 // ---------- Boot ----------
 async function loadHealth() {
+  const chip = document.querySelector(".status-chip");
   try {
-    const response = await fetch("/api/health");
+    const response = await fetch("/api/health", { cache: "no-store" });
+    if (!response.ok) throw new Error("no backend");
     const payload = await response.json();
+    state.hasBackend = true;
     if (payload.model && dom.modelLabel) dom.modelLabel.textContent = payload.model;
-    const chip = document.querySelector(".status-chip");
-    if (!payload.hasKey) {
+    const localKey = !!localStorage.getItem("openai_api_key");
+    if (!payload.hasKey && !localKey) {
       chip?.classList.add("is-warning");
-      showToast("提醒：尚未設定 OPENAI_API_KEY。");
+      showToast("提醒：尚未設定 OpenAI API Key。點左下角可輸入。");
     } else {
       chip?.classList.remove("is-warning");
     }
   } catch {
-    /* ignore */
+    // Static deploy (GitHub Pages, Netlify static, etc.). Direct OpenAI call.
+    state.hasBackend = false;
+    if (dom.modelLabel) {
+      const base = (dom.modelLabel.textContent || "gpt-image-2").replace(/\s·.+$/, "");
+      dom.modelLabel.textContent = `${base} · Static`;
+    }
+    if (!localStorage.getItem("openai_api_key")) {
+      chip?.classList.add("is-warning");
+      showToast("靜態模式：點左下角輸入 OpenAI Key 即可直接生成。");
+    }
   }
 }
 

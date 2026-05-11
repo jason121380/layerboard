@@ -77,6 +77,65 @@ export function saveApiKey(key) {
   else localStorage.removeItem("openai_api_key");
 }
 
+const PROMPT_SUFFIX =
+  "Visual direction: editorial product moodboard.\n" +
+  "Create a polished visual asset suitable for a design moodboard. " +
+  "Avoid text, watermarks, logos, and UI chrome unless explicitly requested.";
+
+function buildFinalPrompt(prompt) {
+  return `${prompt}\n${PROMPT_SUFFIX}`;
+}
+
+/** Call our own /api/generate proxy (Node host: Zeabur / Render / Vercel functions). */
+async function generateViaBackend(prompt, key) {
+  const headers = { "Content-Type": "application/json" };
+  if (key) headers["X-OpenAI-Key"] = key;
+  const response = await fetch("/api/generate", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      prompt,
+      context: "",
+      style: "editorial product moodboard",
+      aspectRatio: "square",
+      count: 1
+    })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || "Image generation failed.");
+  return payload;
+}
+
+/** Call OpenAI Images API directly from the browser. Used in static deploy. */
+async function generateDirect(prompt, key) {
+  const model = (dom.modelLabel?.textContent || "gpt-image-2").replace(/\s·.+$/, "").trim();
+  const response = await fetch("https://api.openai.com/v1/images/generations", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${key}`
+    },
+    body: JSON.stringify({
+      model,
+      prompt: buildFinalPrompt(prompt),
+      size: "1024x1024",
+      n: 1
+    })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error?.message || "OpenAI image generation failed.");
+  }
+  const images = (payload.data || [])
+    .map((item) => (item.b64_json ? `data:image/png;base64,${item.b64_json}` : item.url))
+    .filter(Boolean);
+  return {
+    images,
+    model,
+    revisedPrompt: payload.data?.[0]?.revised_prompt
+  };
+}
+
 export async function generateImages() {
   const prompt = dom.promptInput?.value.trim() || "";
   if (!prompt) {
@@ -86,25 +145,23 @@ export async function generateImages() {
   }
 
   const key = getApiKey();
+  // Static deploy needs the user's key to call OpenAI directly.
+  if (state.hasBackend === false && !key) {
+    showToast("靜態模式：請先點左下角輸入 OpenAI Key。");
+    return;
+  }
+
   setLoading(true);
   try {
-    const headers = { "Content-Type": "application/json" };
-    if (key) headers["X-OpenAI-Key"] = key;
-    const aspectRatio = "square";
-    const response = await fetch("/api/generate", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        prompt,
-        context: "",
-        style: "editorial product moodboard",
-        aspectRatio,
-        count: 1
-      })
-    });
-    const payload = await response.json();
-    if (payload.model && dom.modelLabel) dom.modelLabel.textContent = payload.model;
-    if (!response.ok) throw new Error(payload.error || "Image generation failed.");
+    const payload =
+      state.hasBackend === false
+        ? await generateDirect(prompt, key)
+        : await generateViaBackend(prompt, key);
+
+    if (payload.model && dom.modelLabel) {
+      const suffix = state.hasBackend === false ? " · Static" : "";
+      dom.modelLabel.textContent = `${payload.model}${suffix}`;
+    }
 
     const baseX = 1720 + Math.random() * 420;
     const baseY = 690 + Math.random() * 360;

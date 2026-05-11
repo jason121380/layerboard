@@ -11,7 +11,16 @@
 - **匯出 PNG**：把整張 board 拼合輸出
 - **生成相似**：基於目前選取的素材延伸新的方向
 
-## 啟動
+## 兩種運行模式
+
+| 模式 | 適用場景 | AI 生成 | OCR Magic Layer |
+|---|---|---|---|
+| **後端代理**（推薦）| Zeabur / Render / Vercel functions / 本機 | server 用 `OPENAI_API_KEY` 代打，key 不外露 | ✓ |
+| **靜態前端**（雲端版）| GitHub Pages / Netlify static / CDN | 瀏覽器直接打 `api.openai.com`，key 存在 localStorage | ✓ |
+
+前端會自動探測 `/api/health`：通則用後端模式，回 404 則切換靜態模式（status chip 顯示 `… · Static`）。
+
+## 啟動（本機 / 後端模式）
 
 ```bash
 export OPENAI_API_KEY="你的 key"
@@ -47,6 +56,18 @@ npm run dev
 - 靜態檔加 `Cache-Control: public, max-age=300, must-revalidate`，HTML 用 `no-cache`
 - `/api/health` 回傳模型與是否設定 key，可直接用在 healthcheck
 - 零外部相依套件，冷啟動 < 1 秒，記憶體 < 50 MB
+
+## 部署到 GitHub Pages（靜態模式）
+
+倉庫已備好 `.github/workflows/pages.yml`，會自動把 `public/` 內容部署到 Pages。
+
+1. Repo Settings → Pages → Source 選 **`GitHub Actions`**
+2. push 到 `main` 會自動觸發 workflow（或在 Actions tab 手動 `Run workflow`）
+3. Workflow 跑完後 Pages URL 形如 `https://<user>.github.io/layerboard/`
+4. 第一次打開時點左下角 status chip → 貼自己的 OpenAI API Key → Save
+5. 從此瀏覽器直接打 `api.openai.com`，key 只存在你的 localStorage
+
+> ⚠ **安全提醒**：靜態模式下 OpenAI Key 暴露在瀏覽器執行階段，請只用個人帳號或 spending limit 受控的 key。要分享出去仍推薦走後端代理模式。
 
 ## 專案結構
 
