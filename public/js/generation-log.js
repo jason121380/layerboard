@@ -2,12 +2,14 @@
  * generation-log.js — persisted log of every image-generation attempt for debugging.
  */
 
-const LOG_KEY = "layerboard_generation_log";
+import { namespaced } from "./namespace.js";
+
 const MAX_ENTRIES = 100;
+function logKey() { return namespaced("layerboard_generation_log"); }
 
 export function readLog() {
   try {
-    return JSON.parse(localStorage.getItem(LOG_KEY) || "[]");
+    return JSON.parse(localStorage.getItem(logKey()) || "[]");
   } catch {
     return [];
   }
@@ -15,11 +17,11 @@ export function readLog() {
 
 function writeLog(entries) {
   try {
-    localStorage.setItem(LOG_KEY, JSON.stringify(entries.slice(0, MAX_ENTRIES)));
+    localStorage.setItem(logKey(), JSON.stringify(entries.slice(0, MAX_ENTRIES)));
   } catch {
     // Likely quota exceeded — drop the oldest entries until it fits.
     try {
-      localStorage.setItem(LOG_KEY, JSON.stringify(entries.slice(0, Math.floor(MAX_ENTRIES / 2))));
+      localStorage.setItem(logKey(), JSON.stringify(entries.slice(0, Math.floor(MAX_ENTRIES / 2))));
     } catch {}
   }
 }
@@ -56,5 +58,5 @@ export function logEnd(id, patch) {
 }
 
 export function clearLog() {
-  localStorage.removeItem(LOG_KEY);
+  localStorage.removeItem(logKey());
 }

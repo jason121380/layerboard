@@ -14,7 +14,8 @@ import {
   fitBoard,
   handleBoardPointerDown,
   repositionSelectionBar,
-  uploadImage
+  uploadImage,
+  createItem
 } from "./items.js";
 import { magicLayerSelected, renderLayerPanel } from "./magic-layer.js";
 import { generateImages, exportSelectedItems, saveApiKey } from "./api.js";
@@ -22,6 +23,7 @@ import { pushHistory, undo, redo } from "./history.js";
 import { loadBoard, scheduleAutoSave } from "./persist.js";
 import { renderUsage } from "./usage.js";
 import { readLog, clearLog } from "./generation-log.js";
+import { getNamespace } from "./namespace.js";
 
 // ---------- Mixer resize ----------
 function handleMixerResizePointerDown(event) {
@@ -65,6 +67,20 @@ function handleMixerHandleClick(event) {
   toggleMixerHeight();
 }
 
+// ---------- Per-namespace data reload ----------
+async function reloadNamespaceData() {
+  // Wipe current board off the DOM.
+  for (const item of state.items) item.el.remove();
+  state.items = [];
+  state.selectedIds.clear();
+  state.primarySelectedId = null;
+  // Pull board for the new namespace.
+  const saved = await loadBoard();
+  for (const data of saved) createItem({ ...data, select: false });
+  // Refresh usage chip — log modal re-reads on open.
+  renderUsage();
+}
+
 // ---------- API Key modal ----------
 function initApiKeyModal() {
   const chip = document.querySelector(".status-chip");
@@ -88,14 +104,21 @@ function initApiKeyModal() {
     openaiInput?.focus();
   });
 
-  save.addEventListener("click", () => {
+  save.addEventListener("click", async () => {
+    const before = getNamespace();
     saveApiKey(openaiInput?.value || "");
     const rkey = (replicateInput?.value || "").trim();
     if (rkey) localStorage.setItem("replicate_api_token", rkey);
     else localStorage.removeItem("replicate_api_token");
     modal.hidden = true;
     updateChipState();
-    showToast(rkey ? "Keys 已儲存（含 Replicate）。" : "OpenAI Key 已儲存。");
+    const after = getNamespace();
+    if (after !== before) {
+      await reloadNamespaceData();
+      showToast(`切換到 ${after === "default" ? "未登入" : after} 的帳號`);
+    } else {
+      showToast(rkey ? "Keys 已儲存。" : "OpenAI Key 已儲存。");
+    }
   });
 
   cancel.addEventListener("click", () => { modal.hidden = true; });
