@@ -2,7 +2,7 @@
  * api.js — server calls and PNG export.
  */
 
-import { state, dom, showToast } from "./state.js";
+import { state, dom, showToast, showLoadingProgress } from "./state.js";
 import { loadImage, wrapText } from "./utils.js";
 import { createItem, getSelectedItems } from "./items.js";
 import { scheduleAutoSave } from "./persist.js";
@@ -136,6 +136,50 @@ async function generateDirect(prompt, key) {
   };
 }
 
+// User can dismiss the confirm dialog for the rest of the session.
+let skipConfirmThisSession = false;
+
+function confirmGenerate(prompt) {
+  return new Promise((resolve) => {
+    const modal = document.querySelector("#generateConfirmModal");
+    const okBtn = document.querySelector("#confirmGenerateOk");
+    const cancelBtn = document.querySelector("#confirmGenerateCancel");
+    const skipBox = document.querySelector("#confirmSkipNext");
+    const promptText = document.querySelector("#confirmPromptText");
+    const modelText = document.querySelector("#confirmModelText");
+    if (!modal || !okBtn || !cancelBtn) return resolve(true);
+
+    if (promptText) promptText.textContent = prompt.length > 120 ? `${prompt.slice(0, 120)}…` : prompt;
+    if (modelText) modelText.textContent = (dom.modelLabel?.textContent || "gpt-image-2").replace(/\s·.+$/, "");
+    if (skipBox) skipBox.checked = false;
+    modal.hidden = false;
+
+    function cleanup() {
+      modal.hidden = true;
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      modal.removeEventListener("click", onBackdrop);
+      document.removeEventListener("keydown", onKey);
+    }
+    function onOk() {
+      if (skipBox?.checked) skipConfirmThisSession = true;
+      cleanup();
+      resolve(true);
+    }
+    function onCancel() { cleanup(); resolve(false); }
+    function onBackdrop(e) { if (e.target === modal) onCancel(); }
+    function onKey(e) {
+      if (e.key === "Enter") onOk();
+      else if (e.key === "Escape") onCancel();
+    }
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    modal.addEventListener("click", onBackdrop);
+    document.addEventListener("keydown", onKey);
+    okBtn.focus();
+  });
+}
+
 export async function generateImages() {
   const prompt = dom.promptInput?.value.trim() || "";
   if (!prompt) {
@@ -151,7 +195,24 @@ export async function generateImages() {
     return;
   }
 
+  if (!skipConfirmThisSession) {
+    const ok = await confirmGenerate(prompt);
+    if (!ok) return;
+  }
+
   setLoading(true);
+  const start = Date.now();
+  const progress = showLoadingProgress("生成中… 0 秒");
+  const tick = window.setInterval(() => {
+    const sec = Math.floor((Date.now() - start) / 1000);
+    const label =
+      sec < 8 ? `生成中… ${sec} 秒` :
+      sec < 20 ? `生成中… ${sec} 秒（OpenAI 通常 15–25 秒）` :
+      sec < 40 ? `仍在等 OpenAI 回應… ${sec} 秒` :
+      `${sec} 秒，OpenAI 可能塞車中，請耐心等`;
+    progress.update(label);
+  }, 500);
+
   try {
     const payload =
       state.hasBackend === false
@@ -179,10 +240,12 @@ export async function generateImages() {
     }
     recordImages(payload.images?.length || 1);
     scheduleAutoSave();
-    showToast("已生成並放到 board。");
+    const sec = Math.max(1, Math.round((Date.now() - start) / 1000));
+    progress.end(`已生成（${sec} 秒）。`);
   } catch (error) {
-    showToast(error.message);
+    progress.end(`生成失敗：${error.message}`);
   } finally {
+    window.clearInterval(tick);
     setLoading(false);
   }
 }

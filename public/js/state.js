@@ -71,8 +71,33 @@ export function showToast(message) {
   if (!dom.toast) return;
   dom.toast.textContent = message;
   dom.toast.classList.add("visible");
+  dom.toast.classList.remove("is-progress");
   window.clearTimeout(state.toastTimer);
   state.toastTimer = window.setTimeout(() => dom.toast.classList.remove("visible"), 2800);
+}
+
+/**
+ * Persistent toast for long-running operations. Returns { update, end }.
+ *   const p = showLoadingProgress("生成中…");
+ *   p.update("生成中… 5 秒");
+ *   p.end("完成");
+ */
+export function showLoadingProgress(initialMessage) {
+  if (!dom.toast) return { update: () => {}, end: () => {} };
+  dom.toast.textContent = initialMessage;
+  dom.toast.classList.add("visible", "is-progress");
+  window.clearTimeout(state.toastTimer);
+  return {
+    update(next) {
+      dom.toast.textContent = next;
+    },
+    end(finalMessage) {
+      dom.toast.classList.remove("is-progress");
+      if (finalMessage != null) dom.toast.textContent = finalMessage;
+      window.clearTimeout(state.toastTimer);
+      state.toastTimer = window.setTimeout(() => dom.toast.classList.remove("visible"), 1800);
+    }
+  };
 }
 
 // ---------- Board scale & coords ----------

@@ -14,7 +14,7 @@
  * subject mode silently.
  */
 
-import { state, dom, bumpZ, showToast } from "./state.js";
+import { state, dom, bumpZ, showToast, showLoadingProgress } from "./state.js";
 import {
   uid,
   loadImage,
@@ -572,11 +572,30 @@ function loadTesseractScript() {
   return tesseractScriptPromise;
 }
 
+// Live progress hook for Tesseract. magicLayerSelected swaps this in.
+let ocrProgressHook = null;
+function setOcrProgressHook(fn) { ocrProgressHook = fn; }
+
+function tesseractLogger(message) {
+  if (!ocrProgressHook) return;
+  // Each message: { status: "loading language traineddata" | "recognizing text" | …, progress: 0..1 }
+  const status = message?.status || "";
+  const pct = message?.progress != null ? Math.round(message.progress * 100) : null;
+  const zh =
+    status === "loading tesseract core" ? "OCR 引擎載入" :
+    status === "initializing tesseract" ? "OCR 引擎啟動" :
+    status === "loading language traineddata" ? "下載字典" :
+    status === "initializing api" ? "OCR API 啟動" :
+    status === "recognizing text" ? "辨識文字中" :
+    status || "OCR 處理中";
+  ocrProgressHook(pct != null ? `${zh} ${pct}%` : zh);
+}
+
 async function getOcrWorker() {
   if (tesseractWorkerPromise) return tesseractWorkerPromise;
   tesseractWorkerPromise = (async () => {
     const Tesseract = await loadTesseractScript();
-    return Tesseract.createWorker(OCR_LANGS, 1);
+    return Tesseract.createWorker(OCR_LANGS, 1, { logger: tesseractLogger });
   })().catch((err) => {
     tesseractWorkerPromise = null;
     throw err;
@@ -804,23 +823,27 @@ export async function magicLayerSelected() {
     dom.magicBtn.textContent = "拆解中…";
   }
 
-  // First-run hint: OCR engine is ~3MB script + ~10MB language data on cold start.
   const mode = state.layerMode || "auto";
-  if (mode === "auto" && !window.Tesseract) {
-    showToast("首次拆解：OCR 引擎下載中（約 10–15 MB），完成後會更快…");
-  }
+  const firstRun = mode === "auto" && !window.Tesseract;
+  const progress = showLoadingProgress(
+    firstRun ? "OCR 首次啟動：下載引擎 + 字典約 10–15 MB…" : "拆解圖層中…"
+  );
+  setOcrProgressHook((label) => progress.update(label));
 
   try {
     const createdLayers = [];
     let lastGroup = null;
-    for (const target of targets) {
-      const result = await splitItemIntoLayers(target);
+    for (let i = 0; i < targets.length; i += 1) {
+      if (targets.length > 1) {
+        progress.update(`處理第 ${i + 1} / ${targets.length} 張…`);
+      }
+      const result = await splitItemIntoLayers(targets[i]);
       createdLayers.push(...result.layers);
       lastGroup = result.group || lastGroup;
     }
 
     if (!createdLayers.length) {
-      showToast("沒有分出可用的圖層。試試別張圖或調整 sensitivity。");
+      progress.end("沒有分出可用的圖層。試試別張圖或調整 sensitivity。");
       return;
     }
 
@@ -831,10 +854,11 @@ export async function magicLayerSelected() {
     const summary = textCount
       ? `拆出 ${textCount} 段可編輯文字${layerCount ? ` + ${layerCount} 個圖層` : ""}。`
       : `從 ${targets.length} 張圖拆出 ${createdLayers.length} 個圖層。`;
-    showToast(summary);
+    progress.end(summary);
   } catch (error) {
-    showToast(error.message);
+    progress.end(`拆解失敗：${error.message}`);
   } finally {
+    setOcrProgressHook(null);
     if (dom.magicBtn) dom.magicBtn.classList.remove("is-busy");
     updateControls();
   }
