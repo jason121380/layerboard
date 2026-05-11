@@ -3,11 +3,13 @@
  */
 
 import { state } from "./state.js";
+import { getNamespace } from "./namespace.js";
 
 const DB_NAME = "layerboard";
 const DB_VERSION = 1;
 const STORE = "board";
-const KEY = "items";
+// Per-namespace key so different API keys keep separate boards.
+function itemsKey() { return `items__${getNamespace()}`; }
 
 let db = null;
 let saveTimer = null;
@@ -58,7 +60,7 @@ async function saveNow() {
     const data = serialise();
     await new Promise((resolve, reject) => {
       const tx = idb.transaction(STORE, "readwrite");
-      tx.objectStore(STORE).put(data, KEY);
+      tx.objectStore(STORE).put(data, itemsKey());
       tx.oncomplete = resolve;
       tx.onerror = () => reject(tx.error);
     });
@@ -78,7 +80,7 @@ export async function loadBoard() {
     const idb = await openDb();
     return await new Promise((resolve, reject) => {
       const tx = idb.transaction(STORE, "readonly");
-      const req = tx.objectStore(STORE).get(KEY);
+      const req = tx.objectStore(STORE).get(itemsKey());
       req.onsuccess = () => resolve(req.result || []);
       req.onerror = () => reject(req.error);
     });

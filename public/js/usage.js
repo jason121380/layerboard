@@ -9,9 +9,11 @@
  * records; display converts to TWD on the fly.
  */
 
-const STORAGE_KEY = "layerboard_usage";
+import { namespaced } from "./namespace.js";
+
 const PRICE_PER_IMAGE = 0.04;   // USD, rough estimate for gpt-image-2 standard 1024×1024
 export const USD_TO_TWD = 32;    // Fixed conversion rate; update if needed.
+function storageKey() { return namespaced("layerboard_usage"); }
 
 export function usdToTwd(usd) {
   return Math.round(usd * USD_TO_TWD);
@@ -23,14 +25,14 @@ export function formatTwd(usd) {
 
 function load() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || { count: 0, usd: 0 };
+    return JSON.parse(localStorage.getItem(storageKey())) || { count: 0, usd: 0 };
   } catch {
     return { count: 0, usd: 0 };
   }
 }
 
 function save(data) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  localStorage.setItem(storageKey(), JSON.stringify(data));
 }
 
 export function recordImages(n = 1, priceEach = PRICE_PER_IMAGE) {

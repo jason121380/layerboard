@@ -624,14 +624,14 @@ textarea, select, input[type="range"] { width: 100%; }
 }
 
 .aspect-toggle {
-  width: auto;
-  min-width: 56px;
-  gap: 5px;
-  padding: 0 10px;
-  font-size: 11px;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 10.5px;
   font-weight: 700;
+  letter-spacing: -0.03em;
   color: var(--muted);
-  letter-spacing: 0.02em;
 }
 .aspect-toggle:hover { color: var(--violet); }
 .aspect-toggle[aria-expanded="true"] {
@@ -1148,7 +1148,10 @@ textarea, select, input[type="range"] { width: 100%; }
 }
 .board-item.is-generated.selected {
   outline-color: var(--violet);
-  box-shadow: 0 0 0 4px rgba(150, 92, 255, 0.32), 0 8px 20px rgba(24, 29, 40, 0.16);
+  box-shadow:
+    0 0 0 6px rgba(150, 92, 255, 0.22),
+    0 0 0 12px rgba(150, 92, 255, 0.1),
+    0 10px 28px rgba(24, 29, 40, 0.22);
 }
 .board-item.is-edited {
   border-color: transparent;
@@ -1158,7 +1161,10 @@ textarea, select, input[type="range"] { width: 100%; }
 }
 .board-item.is-edited.selected {
   outline-color: var(--blue);
-  box-shadow: 0 0 0 4px rgba(74, 160, 255, 0.32), 0 8px 20px rgba(24, 29, 40, 0.16);
+  box-shadow:
+    0 0 0 6px rgba(74, 160, 255, 0.22),
+    0 0 0 12px rgba(74, 160, 255, 0.1),
+    0 10px 28px rgba(24, 29, 40, 0.22);
 }
 
 .board-item.text-item {
