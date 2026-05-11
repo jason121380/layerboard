@@ -268,7 +268,7 @@ function confirmGenerate(prompt, referenceItems = []) {
   });
 }
 
-export async function generateImages() {
+export async function generateImages({ forceConfirm = false } = {}) {
   const prompt = dom.promptInput?.value.trim() || "";
   if (!prompt) {
     showToast("先寫一段 prompt。");
@@ -292,7 +292,7 @@ export async function generateImages() {
   const referenceSrcs = referenceItems.map((item) => item.src);
   const isEdit = referenceSrcs.length > 0;
 
-  if (!skipConfirmThisSession) {
+  if (forceConfirm || !skipConfirmThisSession) {
     const ok = await confirmGenerate(prompt, referenceItems);
     if (!ok) return;
   }
