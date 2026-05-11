@@ -1,11 +1,12 @@
 # Layerboard
 
-本地端可跑的 AI moodboard 工作台。整合 OpenAI 圖像生成 API，並內建純前端的 Magic Layer 影像分割演算法。
+本地端可跑的 AI moodboard 工作台。整合 OpenAI 圖像生成 API、純前端 Magic Layer 影像分割演算法，並支援**雲端同步**讓 board、生成紀錄、用量跨裝置保留。
 
 ## 主要功能
 
 - **AI 生成**：`POST /api/generate` 透過 OpenAI Images API 產出畫布素材
 - **Magic Layer**：把任一張圖片拆成 ① OCR 出來的「真正的可編輯文字」（系統預設字型）+ ② Subject layer + ③ Background layer。也可切換 palette / 純文字-圖形模式
+- **雲端同步**：board / 生成紀錄 / 用量自動存到伺服器，換裝置只要輸入同一把 OpenAI Key 就會回來
 - **多選操作**：框選、Shift / ⌘ 加選；多選後可一起移動、縮放、Duplicate、Delete、Magic Layer
 - **拖放上傳**：把任何圖片從桌面拖進畫布即可加入
 - **匯出 PNG**：把整張 board 拼合輸出
@@ -13,12 +14,20 @@
 
 ## 兩種運行模式
 
-| 模式 | 適用場景 | AI 生成 | OCR Magic Layer |
-|---|---|---|---|
-| **後端代理**（推薦）| Zeabur / Render / Vercel functions / 本機 | server 用 `OPENAI_API_KEY` 代打，key 不外露 | ✓ |
-| **靜態前端**（雲端版）| GitHub Pages / Netlify static / CDN | 瀏覽器直接打 `api.openai.com`，key 存在 localStorage | ✓ |
+| 模式 | 適用場景 | AI 生成 | 雲端同步 | OCR Magic Layer |
+|---|---|---|---|---|
+| **後端代理**（推薦）| Zeabur / Render / 本機 | server 用 `OPENAI_API_KEY` 代打，key 不外露 | ✓ | ✓ |
+| **靜態前端** | GitHub Pages / Netlify static / CDN | 瀏覽器直接打 `api.openai.com`，key 存在 localStorage | ✗（無伺服器） | ✓ |
 
-前端會自動探測 `/api/health`：通則用後端模式，回 404 則切換靜態模式（status chip 顯示 `… · Static`）。
+前端會自動探測 `/api/health`：通則用後端模式，回 404 則切換靜態模式（status chip 顯示 `… · Static`）。**靜態模式無法做雲端同步**，當下工作階段的 board 不會被持久化。
+
+## 雲端同步運作方式
+
+- **識別**：以 OpenAI API Key 的 SHA-256 雜湊作為帳號 ID（沒有額外註冊／登入流程）。換 Key 等於換帳號，資料各自獨立。
+- **儲存**：伺服器把每位使用者的資料寫到 `DATA_DIR/<hash>/board.json | log.json | usage.json`（Zeabur Persistent Volume）。
+- **API**：見下方「API」段落的 `/api/board`、`/api/log`、`/api/usage` 端點。
+- **同步時機**：board 改動 600ms 後自動 PUT；生成紀錄／用量在事件發生時 PUT。
+- **安全提醒**：因為以 API Key 當識別，任何拿到 Key 的人都能讀寫對應的資料。請勿分享你的 Key。
 
 ## 啟動（本機 / 後端模式）
 
@@ -35,6 +44,7 @@ npm run dev
 |---|---|---|
 | `OPENAI_API_KEY` | _(選填)_ | OpenAI 金鑰；未設定時前端可由右上角 chip 自行輸入並存到 localStorage（透過 `X-OpenAI-Key` 標頭傳給伺服器）|
 | `OPENAI_IMAGE_MODEL` | `gpt-image-2` | 影像模型名稱（2026/04 起官方推薦）；要降級到 `gpt-image-1` / `gpt-image-1-mini` / `gpt-image-1.5` 改這個變數即可 |
+| `DATA_DIR` | `./data` | 雲端同步資料寫入位置；Zeabur 上應指向已掛載的 Persistent Volume（預設掛在 `/app/data`）|
 | `PORT` | `3000` | 伺服器埠號（Zeabur 等平台會自動注入）|
 | `HOST` | `0.0.0.0` | 監聽位址；容器/PaaS 部署需保持 `0.0.0.0` |
 
@@ -48,6 +58,7 @@ npm run dev
    - `OPENAI_IMAGE_MODEL`（選填）
 3. 開啟 HTTP Domain，Zeabur 會把外部流量導到容器的 `PORT`（自動注入）
 4. Healthcheck 使用 `/api/health`（已在 `zeabur.json` 內設定）
+5. Persistent Volume 已宣告於 `zeabur.json`（`/app/data`），Zeabur 會自動配置；雲端同步資料寫在此處，**重新部署不會遺失**
 
 部署相關優化（已實裝）：
 
@@ -86,6 +97,9 @@ npm run dev
         ├── utils.js       輔助工具（uid、toast、loadImage…）
         ├── items.js       Item 生命週期（建立/拖曳/縮放/選取）
         ├── magic-layer.js Magic Layer 影像分割演算法
+        ├── persist.js     Board 雲端同步（PUT/GET /api/board）
+        ├── generation-log.js 生成紀錄雲端同步（in-memory cache + PUT /api/log）
+        ├── usage.js       用量雲端同步（PUT /api/usage）
         └── api.js         生成、相似生成、PNG 匯出
 ```
 
@@ -116,6 +130,20 @@ npm run dev
 ### `GET /api/health`
 
 回傳目前伺服器狀態與是否已設定金鑰。
+
+### 雲端同步（皆要求 `X-OpenAI-Key` header）
+
+| 方法 | 路徑 | 用途 |
+|---|---|---|
+| GET | `/api/board` | 取得整盤 board items |
+| PUT | `/api/board` | 覆寫整盤 board，body 為 `{ "items": [...] }` |
+| GET | `/api/log` | 取得生成紀錄（最多 100 筆） |
+| PUT | `/api/log` | 覆寫生成紀錄，body 為 `{ "entries": [...] }` |
+| DELETE | `/api/log` | 清空生成紀錄 |
+| GET | `/api/usage` | 取得 `{ count, usd }` |
+| PUT | `/api/usage` | 寫入 `{ count, usd }` |
+
+未帶 `X-OpenAI-Key` 一律回 401。資料以該 key 的 SHA-256 前 32 字元當資料夾名隔離。
 
 ## 開發備註
 

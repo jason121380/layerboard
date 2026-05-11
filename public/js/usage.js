@@ -1,5 +1,5 @@
 /**
- * usage.js — local image generation usage tracking.
+ * usage.js — cloud-sync image generation usage tracking.
  *
  * gpt-image-2 uses token-based pricing ($30 / 1M output tokens at 2026-04 launch).
  * A standard-quality 1024×1024 image ≈ ~1100 output tokens ≈ $0.033.
@@ -9,11 +9,22 @@
  * records; display converts to TWD on the fly.
  */
 
-import { namespaced } from "./namespace.js";
+import { state } from "./state.js";
 
 const PRICE_PER_IMAGE = 0.04;   // USD, rough estimate for gpt-image-2 standard 1024×1024
 export const USD_TO_TWD = 32;    // Fixed conversion rate; update if needed.
-function storageKey() { return namespaced("layerboard_usage"); }
+
+let cache = { count: 0, usd: 0 };
+let initPromise = null;
+let saveTimer = null;
+
+function getKey() {
+  return localStorage.getItem("openai_api_key") || "";
+}
+
+function canSync() {
+  return state.hasBackend !== false && !!getKey();
+}
 
 export function usdToTwd(usd) {
   return Math.round(usd * USD_TO_TWD);
@@ -23,41 +34,70 @@ export function formatTwd(usd) {
   return `NT$ ${usdToTwd(usd).toLocaleString("zh-TW")}`;
 }
 
-function load() {
+export async function initUsage() {
+  if (initPromise) return initPromise;
+  initPromise = (async () => {
+    if (!canSync()) { cache = { count: 0, usd: 0 }; return; }
+    try {
+      const res = await fetch("/api/usage", {
+        headers: { "X-OpenAI-Key": getKey() }
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const data = await res.json();
+      cache = {
+        count: Number(data.count) || 0,
+        usd: Number(data.usd) || 0
+      };
+    } catch (err) {
+      console.warn("[usage] cloud load failed:", err);
+      cache = { count: 0, usd: 0 };
+    }
+  })();
+  return initPromise;
+}
+
+export function resetUsageCache() {
+  cache = { count: 0, usd: 0 };
+  initPromise = null;
+}
+
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNow, 300);
+}
+
+async function saveNow() {
+  if (!canSync()) return;
   try {
-    let raw = localStorage.getItem(storageKey());
-    // Legacy fallback: pre-namespace data was stored at the un-suffixed key.
-    if (!raw) raw = localStorage.getItem("layerboard_usage");
-    return JSON.parse(raw) || { count: 0, usd: 0 };
-  } catch {
-    return { count: 0, usd: 0 };
+    await fetch("/api/usage", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "X-OpenAI-Key": getKey()
+      },
+      body: JSON.stringify(cache)
+    });
+  } catch (err) {
+    console.warn("[usage] cloud save failed:", err);
   }
 }
 
-function save(data) {
-  localStorage.setItem(storageKey(), JSON.stringify(data));
-  // Migrate away — once new data is saved we don't need the legacy key.
-  localStorage.removeItem("layerboard_usage");
-}
-
 export function recordImages(n = 1, priceEach = PRICE_PER_IMAGE) {
-  const data = load();
-  data.count += n;
-  data.usd = Math.round((data.usd + priceEach * n) * 10000) / 10000;
-  save(data);
+  cache.count += n;
+  cache.usd = Math.round((cache.usd + priceEach * n) * 10000) / 10000;
+  scheduleSave();
   renderUsage();
 }
 
 export function renderUsage() {
   const label = document.querySelector("#usageLabel");
   if (!label) return;
-  const data = load();
-  if (!data.count) {
+  if (!cache.count) {
     label.hidden = true;
     return;
   }
   label.hidden = false;
   // Show TWD with at least NT$ 1 so single-image runs aren't displayed as NT$ 0.
-  const twd = Math.max(1, usdToTwd(data.usd));
-  label.textContent = `${data.count} 張 · NT$ ${twd.toLocaleString("zh-TW")}`;
+  const twd = Math.max(1, usdToTwd(cache.usd));
+  label.textContent = `${cache.count} 張 · NT$ ${twd.toLocaleString("zh-TW")}`;
 }

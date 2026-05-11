@@ -21,9 +21,8 @@ import { magicLayerSelected, renderLayerPanel } from "./magic-layer.js";
 import { generateImages, exportSelectedItems, saveApiKey } from "./api.js";
 import { pushHistory, undo, redo } from "./history.js";
 import { loadBoard, scheduleAutoSave } from "./persist.js";
-import { renderUsage } from "./usage.js";
-import { readLog, clearLog } from "./generation-log.js";
-import { getNamespace } from "./namespace.js";
+import { renderUsage, initUsage, resetUsageCache } from "./usage.js";
+import { readLog, clearLog, initLog, resetLogCache } from "./generation-log.js";
 
 // ---------- Mixer resize ----------
 function handleMixerResizePointerDown(event) {
@@ -67,17 +66,20 @@ function handleMixerHandleClick(event) {
   toggleMixerHeight();
 }
 
-// ---------- Per-namespace data reload ----------
-async function reloadNamespaceData() {
+// ---------- Reload cloud data after API key change ----------
+async function reloadCloudData() {
   // Wipe current board off the DOM.
   for (const item of state.items) item.el.remove();
   state.items = [];
   state.selectedIds.clear();
   state.primarySelectedId = null;
-  // Pull board for the new namespace.
+  // Drop caches so they re-fetch under the new identity.
+  resetLogCache();
+  resetUsageCache();
+  // Pull fresh data for the new key.
+  await Promise.all([initUsage(), initLog()]);
   const saved = await loadBoard();
   for (const data of saved) createItem({ ...data, select: false });
-  // Refresh usage chip — log modal re-reads on open.
   renderUsage();
 }
 
@@ -105,17 +107,17 @@ function initApiKeyModal() {
   });
 
   save.addEventListener("click", async () => {
-    const before = getNamespace();
+    const before = (localStorage.getItem("openai_api_key") || "").trim();
     saveApiKey(openaiInput?.value || "");
     const rkey = (replicateInput?.value || "").trim();
     if (rkey) localStorage.setItem("replicate_api_token", rkey);
     else localStorage.removeItem("replicate_api_token");
     modal.hidden = true;
     updateChipState();
-    const after = getNamespace();
+    const after = (localStorage.getItem("openai_api_key") || "").trim();
     if (after !== before) {
-      await reloadNamespaceData();
-      showToast(`切換到 ${after === "default" ? "未登入" : after} 的帳號`);
+      await reloadCloudData();
+      showToast(after ? "已切換帳號，雲端資料載入完成。" : "已登出 — 畫布清空。");
     } else {
       showToast(rkey ? "Keys 已儲存。" : "OpenAI Key 已儲存。");
     }
@@ -216,9 +218,9 @@ function initHistoryModal() {
     });
   });
 
-  clearBtn?.addEventListener("click", () => {
+  clearBtn?.addEventListener("click", async () => {
     if (!confirm("確定清空所有生成紀錄？")) return;
-    clearLog();
+    await clearLog();
     render();
   });
 
@@ -471,14 +473,15 @@ async function loadHealth() {
     state.hasBackend = true;
     if (payload.model && dom.modelLabel) dom.modelLabel.textContent = payload.model;
     const localKey = !!localStorage.getItem("openai_api_key");
-    if (!payload.hasKey && !localKey) {
+    if (!localKey) {
       chip?.classList.add("is-warning");
-      showToast("提醒：尚未設定 OpenAI API Key。點左下角可輸入。");
+      showToast("提醒：尚未設定 OpenAI API Key。點左下角可輸入；雲端同步會以此為帳號識別。");
     } else {
       chip?.classList.remove("is-warning");
     }
   } catch {
-    // Static deploy (GitHub Pages, Netlify static, etc.). Direct OpenAI call.
+    // Static deploy (no backend → no cloud sync). Image generation can still
+    // talk to OpenAI directly, but data won't persist across sessions.
     state.hasBackend = false;
     if (dom.modelLabel) {
       const base = (dom.modelLabel.textContent || "gpt-image-2").replace(/\s·.+$/, "");
@@ -486,7 +489,9 @@ async function loadHealth() {
     }
     if (!localStorage.getItem("openai_api_key")) {
       chip?.classList.add("is-warning");
-      showToast("靜態模式：點左下角輸入 OpenAI Key 即可直接生成。");
+      showToast("靜態模式：點左下角輸入 OpenAI Key 即可直接生成。注意此模式下資料不會跨裝置同步。");
+    } else {
+      showToast("靜態模式：本次工作階段的資料不會被儲存。");
     }
   }
 }
@@ -499,10 +504,10 @@ async function init() {
   setMixerHeight(state.mixerHeight);
   fitBoard(true);
   renderLayerPanel();
-  await loadHealth(); // resolve hasBackend before user can hit the generate button
+  await loadHealth(); // resolve hasBackend before any cloud sync calls
+  await Promise.all([initUsage(), initLog()]);
   renderUsage();
 
-  // 還原上次 board
   const saved = await loadBoard();
   if (saved.length) {
     const { createItem } = await import("./items.js");

@@ -1,16 +1,20 @@
 import http from "node:http";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Buffer, Blob } from "node:buffer";
+import { createHash, randomBytes } from "node:crypto";
 
 // ---------- Config ----------
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, "public");
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT) || 3000;
 const IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || "gpt-image-2";
-const MAX_BODY_BYTES = 32_000_000; // raised to accommodate base64-encoded reference images
+const MAX_BODY_BYTES = 32_000_000;
+// Board JSON includes base64 image data — allow a bigger ceiling.
+const MAX_BOARD_BYTES = 256_000_000;
 const MAX_GEN_COUNT = 4;
 
 const MIME_TYPES = {
@@ -42,15 +46,15 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload));
 }
 
-function readRequestBody(req) {
+function readRequestBody(req, maxBytes = MAX_BODY_BYTES) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let total = 0;
 
     req.on("data", (chunk) => {
       total += chunk.length;
-      if (total > MAX_BODY_BYTES) {
-        reject(new Error("Request body exceeds 1MB limit."));
+      if (total > maxBytes) {
+        reject(new Error(`Request body exceeds ${maxBytes} bytes limit.`));
         req.destroy();
         return;
       }
@@ -83,7 +87,125 @@ function buildPrompt({ prompt, style, context }) {
     .join("\n");
 }
 
-// ---------- Route handlers ----------
+// ---------- Cloud sync helpers ----------
+function userIdFromKey(rawKey) {
+  const key = String(rawKey || "").trim();
+  if (!key) return null;
+  return createHash("sha256").update(key).digest("hex").slice(0, 32);
+}
+
+function userDir(userId) {
+  return path.join(DATA_DIR, userId);
+}
+
+async function readUserJson(userId, name, fallback) {
+  try {
+    const raw = await readFile(path.join(userDir(userId), `${name}.json`), "utf8");
+    return JSON.parse(raw);
+  } catch (err) {
+    if (err.code === "ENOENT") return fallback;
+    throw err;
+  }
+}
+
+async function writeUserJson(userId, name, value) {
+  const dir = userDir(userId);
+  await mkdir(dir, { recursive: true });
+  const finalPath = path.join(dir, `${name}.json`);
+  const tmpPath = `${finalPath}.tmp.${randomBytes(6).toString("hex")}`;
+  await writeFile(tmpPath, JSON.stringify(value));
+  await rename(tmpPath, finalPath);
+}
+
+async function deleteUserJson(userId, name) {
+  try {
+    await unlink(path.join(userDir(userId), `${name}.json`));
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err;
+  }
+}
+
+function requireUserId(req, res) {
+  const userId = userIdFromKey(req.headers["x-openai-key"]);
+  if (!userId) {
+    sendJson(res, 401, { error: "Missing X-OpenAI-Key header. Cloud sync requires a key for identity." });
+    return null;
+  }
+  return userId;
+}
+
+async function readSyncBody(req, res, maxBytes = MAX_BODY_BYTES) {
+  try {
+    return JSON.parse(await readRequestBody(req, maxBytes));
+  } catch (err) {
+    sendJson(res, 400, { error: err.message || "Invalid JSON body." });
+    return null;
+  }
+}
+
+// ---------- Cloud sync route handlers ----------
+async function handleBoardGet(req, res) {
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+  const items = await readUserJson(userId, "board", []);
+  sendJson(res, 200, { items: Array.isArray(items) ? items : [] });
+}
+
+async function handleBoardPut(req, res) {
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+  const body = await readSyncBody(req, res, MAX_BOARD_BYTES);
+  if (!body) return;
+  const items = Array.isArray(body.items) ? body.items : [];
+  await writeUserJson(userId, "board", items);
+  sendJson(res, 200, { ok: true, count: items.length });
+}
+
+async function handleLogGet(req, res) {
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+  const entries = await readUserJson(userId, "log", []);
+  sendJson(res, 200, { entries: Array.isArray(entries) ? entries : [] });
+}
+
+async function handleLogPut(req, res) {
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+  const body = await readSyncBody(req, res);
+  if (!body) return;
+  const entries = Array.isArray(body.entries) ? body.entries : [];
+  await writeUserJson(userId, "log", entries);
+  sendJson(res, 200, { ok: true, count: entries.length });
+}
+
+async function handleLogDelete(req, res) {
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+  await deleteUserJson(userId, "log");
+  sendJson(res, 200, { ok: true });
+}
+
+async function handleUsageGet(req, res) {
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+  const usage = await readUserJson(userId, "usage", { count: 0, usd: 0 });
+  sendJson(res, 200, usage);
+}
+
+async function handleUsagePut(req, res) {
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+  const body = await readSyncBody(req, res);
+  if (!body) return;
+  const data = {
+    count: Number(body.count) || 0,
+    usd: Number(body.usd) || 0
+  };
+  await writeUserJson(userId, "usage", data);
+  sendJson(res, 200, { ok: true });
+}
+
+// ---------- OpenAI image generation ----------
 async function handleGenerate(req, res) {
   const apiKey = req.headers["x-openai-key"] || process.env.OPENAI_API_KEY || "";
   if (!apiKey) {
@@ -183,7 +305,8 @@ function handleHealth(_req, res) {
   sendJson(res, 200, {
     status: "ok",
     model: IMAGE_MODEL,
-    hasKey: Boolean(process.env.OPENAI_API_KEY)
+    hasKey: Boolean(process.env.OPENAI_API_KEY),
+    cloudSync: true
   });
 }
 
@@ -226,7 +349,14 @@ async function handleStatic(req, res) {
 // ---------- Router ----------
 const ROUTES = [
   { method: "POST", path: "/api/generate", handler: handleGenerate },
-  { method: "GET", path: "/api/health", handler: handleHealth }
+  { method: "GET", path: "/api/health", handler: handleHealth },
+  { method: "GET", path: "/api/board", handler: handleBoardGet },
+  { method: "PUT", path: "/api/board", handler: handleBoardPut },
+  { method: "GET", path: "/api/log", handler: handleLogGet },
+  { method: "PUT", path: "/api/log", handler: handleLogPut },
+  { method: "DELETE", path: "/api/log", handler: handleLogDelete },
+  { method: "GET", path: "/api/usage", handler: handleUsageGet },
+  { method: "PUT", path: "/api/usage", handler: handleUsagePut }
 ];
 
 const server = http.createServer(async (req, res) => {
@@ -252,11 +382,17 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, HOST, () => {
+server.listen(PORT, HOST, async () => {
   console.log(`Layerboard listening on http://${HOST}:${PORT}`);
   console.log(`OpenAI image model: ${IMAGE_MODEL}`);
+  console.log(`Cloud sync data dir: ${DATA_DIR}`);
+  try {
+    await mkdir(DATA_DIR, { recursive: true });
+  } catch (err) {
+    console.error("[server] Failed to create data dir:", err);
+  }
   if (!process.env.OPENAI_API_KEY) {
-    console.warn("⚠  OPENAI_API_KEY is not set. /api/generate will return 400.");
+    console.warn("⚠  OPENAI_API_KEY is not set. /api/generate will return 400 without per-request key.");
   }
 });
 
