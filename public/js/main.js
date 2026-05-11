@@ -21,6 +21,7 @@ import { generateImages, exportSelectedItems, saveApiKey } from "./api.js";
 import { pushHistory, undo, redo } from "./history.js";
 import { loadBoard, scheduleAutoSave } from "./persist.js";
 import { renderUsage } from "./usage.js";
+import { readLog, clearLog } from "./generation-log.js";
 
 // ---------- Mixer resize ----------
 function handleMixerResizePointerDown(event) {
@@ -109,6 +110,105 @@ function initApiKeyModal() {
   });
 
   updateChipState();
+}
+
+// ---------- Generation log modal ----------
+function initHistoryModal() {
+  const btn = document.querySelector("#historyBtn");
+  const modal = document.querySelector("#historyModal");
+  const list = document.querySelector("#historyList");
+  const closeBtn = document.querySelector("#historyClose");
+  const clearBtn = document.querySelector("#historyClear");
+  const copyBtn = document.querySelector("#historyCopy");
+  const filters = modal?.querySelectorAll(".history-filter");
+  if (!btn || !modal || !list) return;
+
+  let activeFilter = "all";
+
+  function fmtTime(ts) {
+    const d = new Date(ts);
+    return d.toLocaleString("zh-TW", { hour12: false });
+  }
+
+  function fmtDuration(ms) {
+    if (ms == null) return "—";
+    return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} 秒`;
+  }
+
+  function statusGlyph(s) {
+    if (s === "success") return "✓";
+    if (s === "failed") return "✕";
+    return "…";
+  }
+
+  function render() {
+    const entries = readLog().filter((e) =>
+      activeFilter === "all" ? true : e.status === activeFilter
+    );
+    if (!entries.length) {
+      list.innerHTML = '<div class="history-empty">尚無紀錄。試試在下方輸入 prompt 並按生成。</div>';
+      return;
+    }
+    list.innerHTML = entries.map((e) => {
+      const tags = [
+        `<span class="log-tag">${e.mode === "edit" ? "編輯" : "生成"}</span>`,
+        `<span class="log-tag">${e.aspectRatio || "square"}</span>`,
+        `<span class="log-tag">${e.model || "?"}</span>`,
+        `<span class="log-tag">${e.backend || "?"}</span>`,
+        e.referenceCount ? `<span class="log-tag">${e.referenceCount} 參考圖</span>` : "",
+        e.imageCount ? `<span class="log-tag tag-success">${e.imageCount} 張</span>` : ""
+      ].filter(Boolean).join("");
+      const errorBlock = e.status === "failed" && e.error
+        ? `<div class="log-error">${e.error.replace(/</g, "&lt;")}</div>`
+        : "";
+      return `
+        <div class="log-entry">
+          <span class="log-status log-status-${e.status || "pending"}">${statusGlyph(e.status)}</span>
+          <div>
+            <div class="log-row">
+              <span class="log-time">${fmtTime(e.time)}</span>
+              ${tags}
+              <span class="log-tag">${fmtDuration(e.durationMs)}</span>
+            </div>
+            <div class="log-prompt">${(e.prompt || "").replace(/</g, "&lt;")}</div>
+            ${errorBlock}
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  btn.addEventListener("click", () => {
+    render();
+    modal.hidden = false;
+  });
+  closeBtn?.addEventListener("click", () => { modal.hidden = true; });
+  modal.addEventListener("click", (e) => { if (e.target === modal) modal.hidden = true; });
+
+  filters?.forEach((f) => {
+    f.addEventListener("click", () => {
+      activeFilter = f.dataset.filter;
+      filters.forEach((b) => b.classList.toggle("active", b === f));
+      render();
+    });
+  });
+
+  clearBtn?.addEventListener("click", () => {
+    if (!confirm("確定清空所有生成紀錄？")) return;
+    clearLog();
+    render();
+  });
+
+  copyBtn?.addEventListener("click", async () => {
+    const json = JSON.stringify(readLog(), null, 2);
+    try {
+      await navigator.clipboard.writeText(json);
+      showToast("紀錄已複製為 JSON。");
+    } catch {
+      showToast("複製失敗，請手動從 console 取得。");
+      console.log(json);
+    }
+  });
 }
 
 // ---------- Grid toggle ----------
@@ -379,6 +479,7 @@ async function loadHealth() {
 async function init() {
   bindEvents();
   initApiKeyModal();
+  initHistoryModal();
   initGridToggle();
   setMixerHeight(state.mixerHeight);
   fitBoard(true);

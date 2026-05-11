@@ -19,6 +19,11 @@
           <span id="modelLabel">gpt-image-2</span>
           <span id="usageLabel" class="usage-label" hidden></span>
         </div>
+        <button id="historyBtn" class="topbar-icon-btn" type="button" title="生成紀錄" aria-label="生成紀錄">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="10"/>
+          </svg>
+        </button>
         <button id="gridToggleBtn" class="topbar-icon-btn" type="button" title="顯示/隱藏格線" aria-label="Toggle grid" aria-pressed="true">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
@@ -99,6 +104,26 @@
         <!-- always -->
         <button id="deleteBtn" type="button" disabled>刪除</button>
       </section>
+
+      <!-- ===== Generation Log Modal ===== -->
+      <div id="historyModal" class="api-modal" role="dialog" aria-modal="true" aria-label="生成紀錄" hidden>
+        <div class="api-modal-card history-card">
+          <div class="history-header">
+            <p class="api-modal-title" style="margin:0">生成紀錄</p>
+            <div class="history-filters" role="tablist">
+              <button class="history-filter active" type="button" data-filter="all">全部</button>
+              <button class="history-filter" type="button" data-filter="success">成功</button>
+              <button class="history-filter" type="button" data-filter="failed">失敗</button>
+            </div>
+          </div>
+          <div id="historyList" class="history-list"></div>
+          <div class="api-modal-actions">
+            <button id="historyClear" class="api-modal-cancel" type="button">清空紀錄</button>
+            <button id="historyCopy" class="api-modal-cancel" type="button">複製為 JSON</button>
+            <button id="historyClose" class="api-modal-save" type="button">關閉</button>
+          </div>
+        </div>
+      </div>
 
       <!-- ===== Prompt View Modal ===== -->
       <div id="promptViewModal" class="api-modal" role="dialog" aria-modal="true" aria-label="View prompt" hidden>
