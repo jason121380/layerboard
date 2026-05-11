@@ -80,17 +80,18 @@ textarea, select, input[type="range"] { width: 100%; }
 .workspace { z-index: 1; }
 
 .board-frame {
-  overflow: auto;
+  overflow: hidden;
   background: transparent;
 }
 
 .board {
-  position: relative;
+  position: absolute;
+  left: 50%;
+  top: 50%;
   width: 4200px;
   height: 2600px;
-  min-width: 4200px;
-  min-height: 2600px;
-  transform-origin: top left;
+  transform: translate(-50%, -50%);
+  transform-origin: center center;
   background: transparent;
 }
 

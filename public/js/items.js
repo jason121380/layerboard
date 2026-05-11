@@ -397,9 +397,13 @@ function handleResizePointerDown(event, item) {
 
 // ---------- Marquee selection ----------
 export function handleBoardPointerDown(event) {
-  if (event.target !== dom.board && !event.target.classList.contains("grid-lines")) return;
+  // Marquee works from anywhere except inside items or UI controls.
+  if (event.target.closest(".board-item")) return;
+  if (event.target.closest(".selection-bar, .mixer-card, .canvas-topbar, .api-modal")) return;
+  if (event.target.matches("button, input, textarea, select")) return;
   event.preventDefault();
 
+  const captureTarget = event.currentTarget; // .board-frame
   const additive = event.shiftKey || event.metaKey || event.ctrlKey;
   const initialSelection = new Set(state.selectedIds);
   const start = getBoardPoint(event);
@@ -407,7 +411,7 @@ export function handleBoardPointerDown(event) {
   box.className = "selection-box";
   box.hidden = true;
   dom.board.append(box);
-  dom.board.setPointerCapture(event.pointerId);
+  captureTarget.setPointerCapture(event.pointerId);
 
   let didDrag = false;
 
@@ -434,14 +438,14 @@ export function handleBoardPointerDown(event) {
   function onUp() {
     if (!didDrag && !additive) clearSelection();
     box.remove();
-    dom.board.removeEventListener("pointermove", onMove);
-    dom.board.removeEventListener("pointerup", onUp);
-    dom.board.removeEventListener("pointercancel", onUp);
+    captureTarget.removeEventListener("pointermove", onMove);
+    captureTarget.removeEventListener("pointerup", onUp);
+    captureTarget.removeEventListener("pointercancel", onUp);
   }
 
-  dom.board.addEventListener("pointermove", onMove);
-  dom.board.addEventListener("pointerup", onUp);
-  dom.board.addEventListener("pointercancel", onUp);
+  captureTarget.addEventListener("pointermove", onMove);
+  captureTarget.addEventListener("pointerup", onUp);
+  captureTarget.addEventListener("pointercancel", onUp);
 }
 
 // ---------- Bulk operations ----------
@@ -623,8 +627,6 @@ export function fitBoard(silent = false) {
   );
   // 初始最低 50%，讓格線清晰可見
   const scale = Math.max(fitScale, 0.5);
-  dom.board.style.transform = `scale(${scale})`;
-  frame.scrollLeft = 0;
-  frame.scrollTop = 0;
+  dom.board.style.transform = `translate(-50%, -50%) scale(${scale})`;
   if (!silent) showToast(`Board scale ${Math.round(scale * 100)}%。`);
 }
