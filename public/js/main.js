@@ -2,7 +2,7 @@
  * main.js — entry point. Wires DOM events to feature modules.
  */
 
-import { state, dom, showToast, setMixerHeight, toggleMixerHeight, getBoardScale, getBoardPoint } from "./state.js";
+import { state, dom, showToast, setMixerHeight, toggleMixerHeight, getBoardScale, getBoardPoint, applyBoardTransform } from "./state.js";
 import {
   clearSelection,
   deleteSelected,
@@ -152,15 +152,20 @@ function bindEvents() {
     repositionSelectionBar();
   });
 
-  // Trackpad / pinch zoom
+  // Trackpad / wheel: ctrl = pinch zoom, otherwise 2-D pan.
   const boardFrame = document.querySelector(".board-frame");
 
   boardFrame?.addEventListener("wheel", (e) => {
-    if (!e.ctrlKey) return;
     e.preventDefault();
-    const currentScale = getBoardScale();
-    const newScale = Math.max(0.05, Math.min(2, currentScale * (1 - e.deltaY * 0.008)));
-    dom.board.style.transform = `translate(-50%, -50%) scale(${newScale})`;
+    if (e.ctrlKey) {
+      const newScale = Math.max(0.05, Math.min(2, state.boardScale * (1 - e.deltaY * 0.008)));
+      state.boardScale = newScale;
+    } else {
+      // Natural-scroll semantics: swipe down → look further down → translate board up.
+      state.boardPanX -= e.deltaX;
+      state.boardPanY -= e.deltaY;
+    }
+    applyBoardTransform();
     repositionSelectionBar();
   }, { passive: false });
 

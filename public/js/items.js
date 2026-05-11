@@ -2,7 +2,7 @@
  * items.js — item lifecycle, drag/resize, selection, and board interactions.
  */
 
-import { state, dom, bumpZ, showToast, getBoardScale, getBoardPoint } from "./state.js";
+import { state, dom, bumpZ, showToast, getBoardScale, getBoardPoint, applyBoardTransform } from "./state.js";
 import { uid, rectFromPoints, intersectsRect, getItemsBounds } from "./utils.js";
 import { renderLayerPanel } from "./magic-layer.js";
 import { scheduleAutoSave } from "./persist.js";
@@ -627,6 +627,9 @@ export function fitBoard(silent = false) {
   );
   // 初始最低 50%，讓格線清晰可見
   const scale = Math.max(fitScale, 0.5);
-  dom.board.style.transform = `translate(-50%, -50%) scale(${scale})`;
+  state.boardScale = scale;
+  state.boardPanX = 0;
+  state.boardPanY = 0;
+  applyBoardTransform();
   if (!silent) showToast(`Board scale ${Math.round(scale * 100)}%。`);
 }
