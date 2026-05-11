@@ -6,7 +6,7 @@ import { state, dom, showToast, showLoadingProgress } from "./state.js";
 import { loadImage, wrapText } from "./utils.js";
 import { createItem, getSelectedItems } from "./items.js";
 import { scheduleAutoSave } from "./persist.js";
-import { recordImages } from "./usage.js";
+import { recordImages, USD_TO_TWD } from "./usage.js";
 
 export async function exportSelectedItems() {
   const items = getSelectedItems().filter((i) => i.visible !== false);
@@ -151,6 +151,11 @@ function confirmGenerate(prompt) {
 
     if (promptText) promptText.textContent = prompt.length > 120 ? `${prompt.slice(0, 120)}…` : prompt;
     if (modelText) modelText.textContent = (dom.modelLabel?.textContent || "gpt-image-2").replace(/\s·.+$/, "");
+    const costText = document.querySelector("#confirmCostText");
+    if (costText) {
+      const twd = (0.04 * USD_TO_TWD).toFixed(1); // 0.04 USD × 32 = 1.3
+      costText.textContent = `NT$ ${twd}`;
+    }
     if (skipBox) skipBox.checked = false;
     modal.hidden = false;
 
