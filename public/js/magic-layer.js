@@ -728,8 +728,13 @@ async function runAutoMode(selected) {
 
   const { items: textItems, bboxes: textBboxes } = await ocrExtract(image, data, width, height);
 
+  // No text found → don't force-split into subject/background. Magic Layer in
+  // auto mode is text-focused; user can switch to "subject" / "palette" via
+  // state.layerMode when they want image splitting.
+  if (!textItems.length) return [];
+
   const subjectMask = buildSaliencyMask(data, width, height, getSensitivity());
-  if (textBboxes.length) maskOutBboxes(subjectMask, width, height, textBboxes, 2);
+  maskOutBboxes(subjectMask, width, height, textBboxes, 2);
 
   let subjectArea = 0;
   for (let i = 0; i < subjectMask.length; i += 1) subjectArea += subjectMask[i];
@@ -737,15 +742,16 @@ async function runAutoMode(selected) {
 
   const out = textItems.map((t) => ({ ...t, sourceWidth: width, sourceHeight: height }));
 
-  // Only emit subject/background when there's a meaningful subject AND something
-  // wasn't already covered by text (e.g. text-heavy posters get text only).
-  if (subjectFraction > 0.005) {
+  // Subject + background extraction is only meaningful when there's a clear
+  // subject region left over after removing the text. Otherwise (text-heavy
+  // posters, plain backgrounds) text items alone are the magic layer.
+  if (subjectFraction > 0.02) {
     const subjectLayer = maskToLayer(data, width, height, subjectMask);
     if (subjectLayer) out.push({ ...subjectLayer, kind: "subject", sourceWidth: width, sourceHeight: height });
 
     const backgroundMask = new Uint8Array(subjectMask.length);
     for (let i = 0; i < subjectMask.length; i += 1) backgroundMask[i] = subjectMask[i] ? 0 : 1;
-    if (textBboxes.length) maskOutBboxes(backgroundMask, width, height, textBboxes, 2);
+    maskOutBboxes(backgroundMask, width, height, textBboxes, 2);
     const backgroundLayer = maskToLayer(data, width, height, backgroundMask);
     if (backgroundLayer) out.push({ ...backgroundLayer, kind: "background", sourceWidth: width, sourceHeight: height });
   }
@@ -763,8 +769,10 @@ async function runForMode(selected, mode) {
 async function splitItemIntoLayers(selected) {
   const mode = state.layerMode || "auto";
   let layers = await runForMode(selected, mode);
-  // Auto/subject can return empty for low-contrast images — fall back to palette.
-  if (!layers.length && (mode === "auto" || mode === "subject")) {
+  // Subject mode can return empty for low-contrast images — fall back to
+  // palette so the user still gets *something*. "auto" mode intentionally
+  // doesn't fall back: no text means no magic layer.
+  if (!layers.length && mode === "subject") {
     layers = await runPaletteMode(selected);
   }
 
@@ -843,7 +851,10 @@ export async function magicLayerSelected() {
     }
 
     if (!createdLayers.length) {
-      progress.end("沒有分出可用的圖層。試試別張圖或調整 sensitivity。");
+      const autoMsg = mode === "auto"
+        ? "這張圖沒有偵測到文字，原圖層保持不變。"
+        : "沒有分出可用的圖層。試試別張圖或調整 sensitivity。";
+      progress.end(autoMsg);
       return;
     }
 
