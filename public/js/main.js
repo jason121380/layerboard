@@ -266,7 +266,9 @@ function bindEvents() {
   dom.promptInput?.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      generateImages();
+      // Enter is easy to hit by accident, so always show the confirm modal
+      // even when the user previously checked "this session don't ask again".
+      generateImages({ forceConfirm: true });
     }
   });
 
@@ -435,7 +437,7 @@ function bindEvents() {
     }
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
-      generateImages();
+      generateImages({ forceConfirm: true });
       return;
     }
     if (
