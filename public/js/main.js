@@ -160,7 +160,7 @@ function bindEvents() {
     e.preventDefault();
     const currentScale = getBoardScale();
     const newScale = Math.max(0.05, Math.min(2, currentScale * (1 - e.deltaY * 0.008)));
-    dom.board.style.transform = `scale(${newScale})`;
+    dom.board.style.transform = `translate(-50%, -50%) scale(${newScale})`;
     repositionSelectionBar();
   }, { passive: false });
 
@@ -238,12 +238,10 @@ function bindEvents() {
     }
   });
 
-  dom.board?.addEventListener("pointerdown", handleBoardPointerDown);
-
-  // Click on empty canvas area clears selection
-  document.querySelector(".board-frame")?.addEventListener("pointerdown", (e) => {
-    if (e.target === e.currentTarget) clearSelection();
-  });
+  // Marquee selection is attached to the frame, not the board itself,
+  // so dragging from anywhere in the viewport (including outside the
+  // 4200×2600 board area) starts a selection box.
+  document.querySelector(".board-frame")?.addEventListener("pointerdown", handleBoardPointerDown);
 }
 
 // ---------- Boot ----------
