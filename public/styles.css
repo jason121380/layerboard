@@ -81,7 +81,7 @@ textarea, select, input[type="range"] { width: 100%; }
 
 .board-frame {
   overflow: auto;
-  background: #fafbfc;
+  background: transparent;
 }
 
 .board {
