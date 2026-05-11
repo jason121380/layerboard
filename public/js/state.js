@@ -21,6 +21,7 @@ export const dom = {
   selectedCount: document.querySelector("#selectedCount"),
   magicBtn: document.querySelector("#magicBtn"),
   revertBtn: document.querySelector("#revertBtn"),
+  promptBtn: document.querySelector("#promptBtn"),
   duplicateBtn: document.querySelector("#duplicateBtn"),
   exportBtn: document.querySelector("#exportBtn"),
   groupBtn: document.querySelector("#groupBtn"),
@@ -50,7 +51,9 @@ export const state = {
   // Board viewport: composed transform = translate(centre + pan) · scale.
   boardScale: 1,
   boardPanX: 0,
-  boardPanY: 0
+  boardPanY: 0,
+  // Output aspect ratio for new generations: "square" | "portrait" | "landscape"
+  aspectRatio: "square"
 };
 
 export function applyBoardTransform() {

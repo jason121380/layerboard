@@ -73,6 +73,11 @@ export function updateControls() {
     dom.revertBtn.hidden = isMulti || !isLayerItem;
     dom.revertBtn.disabled = !isLayerItem;
   }
+  if (dom.promptBtn) {
+    const showPrompt = !isMulti && !!primaryItem?.prompt;
+    dom.promptBtn.hidden = !showPrompt;
+    dom.promptBtn.disabled = !showPrompt;
+  }
   if (dom.duplicateBtn) {
     dom.duplicateBtn.hidden = isMulti;
     dom.duplicateBtn.disabled = !hasSelection;
@@ -175,6 +180,8 @@ export function syncItemElement(item) {
   item.el.style.display = item.visible === false ? "none" : "block";
   item.el.classList.toggle("layer-item", item.type === "layer");
   item.el.classList.toggle("text-item", item.type === "text");
+  item.el.classList.toggle("is-generated", item.source === "generated");
+  item.el.classList.toggle("is-edited", item.source === "edit");
 }
 
 const DEFAULT_TEXT_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Inter, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif';
@@ -274,7 +281,9 @@ export function createItem(data) {
     fontSize: data.fontSize ?? null,
     color: data.color ?? null,
     fontFamily: data.fontFamily ?? null,
-    fontWeight: data.fontWeight ?? null
+    fontWeight: data.fontWeight ?? null,
+    prompt: data.prompt ?? null,
+    source: data.source ?? null // "generated" | "edit" | "upload" | null
   };
 
   node.dataset.id = item.id;
@@ -628,7 +637,8 @@ export function uploadImage(file, x, y) {
         x: x ?? 180 + Math.random() * 260,
         y: y ?? 140 + Math.random() * 220,
         width: Math.round(img.naturalWidth * scale),
-        height: Math.round(img.naturalHeight * scale)
+        height: Math.round(img.naturalHeight * scale),
+        source: "upload"
       });
     };
     img.src = src;
