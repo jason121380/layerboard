@@ -89,6 +89,7 @@
         <!-- single-select actions -->
         <button id="magicBtn" type="button" disabled>魔法圖層</button>
         <button id="revertBtn" type="button" disabled>還原圖層</button>
+        <button id="promptBtn" type="button" disabled>查看提示詞</button>
         <button id="duplicateBtn" type="button" disabled>複製</button>
         <button id="exportBtn" type="button" disabled>匯出</button>
         <!-- multi-select actions -->
@@ -99,12 +100,35 @@
         <button id="deleteBtn" type="button" disabled>刪除</button>
       </section>
 
+      <!-- ===== Prompt View Modal ===== -->
+      <div id="promptViewModal" class="api-modal" role="dialog" aria-modal="true" aria-label="View prompt" hidden>
+        <div class="api-modal-card">
+          <p class="api-modal-title">生成提示詞</p>
+          <pre id="promptViewText" class="prompt-view-text"></pre>
+          <div class="api-modal-actions">
+            <button id="promptViewCopy" class="api-modal-save" type="button">複製</button>
+            <button id="promptViewClose" class="api-modal-cancel" type="button">關閉</button>
+          </div>
+        </div>
+      </div>
+
       <!-- ===== Mixer card (prompt panel) ===== -->
       <section class="mixer-card visible" aria-label="Mixboard prompt">
         <div id="mixerSelectionChip" class="mixer-selection-chip" hidden>
           <div id="mixerSelectionThumbs" class="mixer-selection-thumbs"></div>
           <span id="mixerSelectionLabel" class="mixer-selection-label">已選 0 張作為參考</span>
           <button id="mixerSelectionClear" type="button" aria-label="取消選取" title="取消選取">×</button>
+        </div>
+        <div class="aspect-ratio-group" role="radiogroup" aria-label="輸出尺寸">
+          <button class="aspect-btn active" type="button" data-ratio="square" aria-label="1 比 1">
+            <span class="aspect-icon aspect-icon-1-1"></span><span>1:1</span>
+          </button>
+          <button class="aspect-btn" type="button" data-ratio="portrait" aria-label="9 比 16 直式">
+            <span class="aspect-icon aspect-icon-9-16"></span><span>9:16</span>
+          </button>
+          <button class="aspect-btn" type="button" data-ratio="landscape" aria-label="16 比 9 橫式">
+            <span class="aspect-icon aspect-icon-16-9"></span><span>16:9</span>
+          </button>
         </div>
         <div class="mixer-input-row">
           <textarea id="promptInput" rows="1" placeholder="你想要生成什麼呢"></textarea>

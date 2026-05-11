@@ -550,6 +550,45 @@ textarea, select, input[type="range"] { width: 100%; }
 
 .mixer-selection-thumbs img + img { margin-left: -8px; }
 
+/* Aspect ratio segmented buttons */
+.aspect-ratio-group {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.04);
+}
+.aspect-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+.aspect-btn:hover { color: var(--ink); }
+.aspect-btn.active {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 1px 4px rgba(31, 34, 42, 0.12);
+}
+.aspect-icon {
+  display: inline-block;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  opacity: 0.7;
+}
+.aspect-icon-1-1 { width: 12px; height: 12px; }
+.aspect-icon-9-16 { width: 9px; height: 14px; }
+.aspect-icon-16-9 { width: 14px; height: 9px; }
+
 .mixer-selection-label {
   flex: 1;
   font-weight: 600;
@@ -601,12 +640,13 @@ textarea, select, input[type="range"] { width: 100%; }
 }
 
 #promptInput {
-  height: 24px;
   min-height: 24px;
+  max-height: 200px;
   margin: 0;
   border: 0;
   outline: 0;
   resize: none;
+  overflow-y: auto;
   color: var(--ink);
   background: transparent;
   font-size: 15px;
@@ -732,6 +772,22 @@ textarea, select, input[type="range"] { width: 100%; }
   cursor: pointer;
 }
 .confirm-skip input { margin: 0; }
+
+.prompt-view-text {
+  max-height: 320px;
+  overflow: auto;
+  padding: 12px 14px;
+  margin: 0 0 12px;
+  border: 1px solid #e0e2e8;
+  border-radius: 12px;
+  background: #f8f9fb;
+  color: var(--ink);
+  font-family: ui-monospace, "SF Mono", Monaco, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 /* ---------- 6. Selection bar ---------- */
 .selection-bar {
@@ -926,6 +982,28 @@ textarea, select, input[type="range"] { width: 100%; }
 
 .board-item.layer-item {
   background: rgba(255, 255, 255, 0.72);
+}
+
+/* Source distinction: AI-generated vs user-edited vs uploaded */
+.board-item.is-generated {
+  border-color: rgba(150, 92, 255, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(150, 92, 255, 0.18),
+    0 6px 16px rgba(24, 29, 40, 0.12);
+}
+.board-item.is-generated.selected {
+  border-color: var(--violet);
+  box-shadow: 0 0 0 3px rgba(150, 92, 255, 0.3), 0 8px 20px rgba(24, 29, 40, 0.16);
+}
+.board-item.is-edited {
+  border-color: rgba(74, 160, 255, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(74, 160, 255, 0.18),
+    0 6px 16px rgba(24, 29, 40, 0.12);
+}
+.board-item.is-edited.selected {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(74, 160, 255, 0.3), 0 8px 20px rgba(24, 29, 40, 0.16);
 }
 
 .board-item.text-item {

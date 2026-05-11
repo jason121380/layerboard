@@ -149,6 +149,51 @@ function bindEvents() {
 
   document.querySelector("#mixerSelectionClear")?.addEventListener("click", clearSelection);
 
+  // Aspect ratio segmented buttons.
+  const aspectGroup = document.querySelector(".aspect-ratio-group");
+  aspectGroup?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-ratio]");
+    if (!btn) return;
+    state.aspectRatio = btn.dataset.ratio || "square";
+    aspectGroup.querySelectorAll(".aspect-btn").forEach((b) => {
+      b.classList.toggle("active", b === btn);
+    });
+  });
+
+  // "查看提示詞" button on selection bar.
+  document.querySelector("#promptBtn")?.addEventListener("click", () => {
+    const primary = state.items.find((i) => i.id === state.primarySelectedId);
+    if (!primary?.prompt) return;
+    const modal = document.querySelector("#promptViewModal");
+    const textEl = document.querySelector("#promptViewText");
+    if (textEl) textEl.textContent = primary.prompt;
+    if (modal) modal.hidden = false;
+  });
+  document.querySelector("#promptViewClose")?.addEventListener("click", () => {
+    const modal = document.querySelector("#promptViewModal");
+    if (modal) modal.hidden = true;
+  });
+  document.querySelector("#promptViewCopy")?.addEventListener("click", async () => {
+    const text = document.querySelector("#promptViewText")?.textContent || "";
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast("提示詞已複製。");
+    } catch {
+      showToast("複製失敗，請手動選取。");
+    }
+  });
+  document.querySelector("#promptViewModal")?.addEventListener("click", (e) => {
+    if (e.target.id === "promptViewModal") e.currentTarget.hidden = true;
+  });
+
+  // Textarea auto-resize.
+  function autoResizePrompt() {
+    if (!dom.promptInput) return;
+    dom.promptInput.style.height = "auto";
+    dom.promptInput.style.height = Math.min(200, dom.promptInput.scrollHeight) + "px";
+  }
+  dom.promptInput?.addEventListener("input", autoResizePrompt);
+
   dom.uploadBtn?.addEventListener("click", () => dom.fileInput?.click());
   dom.fileInput?.addEventListener("change", () => {
     const files = Array.from(dom.fileInput.files || []);

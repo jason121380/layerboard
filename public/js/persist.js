@@ -45,7 +45,9 @@ function serialise() {
     fontSize: item.fontSize ?? null,
     color: item.color ?? null,
     fontFamily: item.fontFamily ?? null,
-    fontWeight: item.fontWeight ?? null
+    fontWeight: item.fontWeight ?? null,
+    prompt: item.prompt ?? null,
+    source: item.source ?? null
   }));
 }
 

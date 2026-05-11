@@ -86,6 +86,20 @@ function buildFinalPrompt(prompt) {
   return `${prompt}\n${PROMPT_SUFFIX}`;
 }
 
+/** Map aspect ratio string to gpt-image-2 size. */
+function sizeForRatio(ratio) {
+  if (ratio === "portrait") return "1024x1536";
+  if (ratio === "landscape") return "1536x1024";
+  return "1024x1024";
+}
+
+/** Display dimensions (board px) for new items at each ratio. */
+function displayDimsForRatio(ratio) {
+  if (ratio === "portrait") return { width: 260, height: 390 };
+  if (ratio === "landscape") return { width: 420, height: 236 };
+  return { width: 330, height: 330 };
+}
+
 /** Convert any image src (data URL or http URL) to a PNG Blob suitable for the
  *  OpenAI edits endpoint. */
 async function srcToPngBlob(src) {
@@ -102,7 +116,7 @@ async function srcToPngBlob(src) {
 
 /** Call our own /api/generate proxy (Node host). Accepts optional array of
  *  reference image data URLs — server forwards to /v1/images/edits when present. */
-async function generateViaBackend(prompt, key, referenceSrcs = []) {
+async function generateViaBackend(prompt, key, referenceSrcs = [], aspectRatio = "square") {
   const headers = { "Content-Type": "application/json" };
   if (key) headers["X-OpenAI-Key"] = key;
   const response = await fetch("/api/generate", {
@@ -112,7 +126,7 @@ async function generateViaBackend(prompt, key, referenceSrcs = []) {
       prompt,
       context: "",
       style: "editorial product moodboard",
-      aspectRatio: "square",
+      aspectRatio,
       count: 1,
       images: referenceSrcs
     })
@@ -123,8 +137,9 @@ async function generateViaBackend(prompt, key, referenceSrcs = []) {
 }
 
 /** Call OpenAI Images API directly from the browser. Used in static deploy. */
-async function generateDirect(prompt, key, referenceSrcs = []) {
+async function generateDirect(prompt, key, referenceSrcs = [], aspectRatio = "square") {
   const model = (dom.modelLabel?.textContent || "gpt-image-2").replace(/\s·.+$/, "").trim();
+  const size = sizeForRatio(aspectRatio);
 
   // Edit mode (image + prompt) — gpt-image-2 accepts multiple `image` parts.
   if (referenceSrcs.length) {
@@ -136,7 +151,7 @@ async function generateDirect(prompt, key, referenceSrcs = []) {
     formData.append("prompt", buildFinalPrompt(prompt));
     formData.append("model", model);
     formData.append("n", "1");
-    formData.append("size", "1024x1024");
+    formData.append("size", size);
     const response = await fetch("https://api.openai.com/v1/images/edits", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}` },
@@ -159,7 +174,7 @@ async function generateDirect(prompt, key, referenceSrcs = []) {
     body: JSON.stringify({
       model,
       prompt: buildFinalPrompt(prompt),
-      size: "1024x1024",
+      size,
       n: 1
     })
   });
@@ -296,11 +311,13 @@ export async function generateImages() {
     progress.update(label);
   }, 500);
 
+  const aspectRatio = state.aspectRatio || "square";
+
   try {
     const payload =
       state.hasBackend === false
-        ? await generateDirect(prompt, key, referenceSrcs)
-        : await generateViaBackend(prompt, key, referenceSrcs);
+        ? await generateDirect(prompt, key, referenceSrcs, aspectRatio)
+        : await generateViaBackend(prompt, key, referenceSrcs, aspectRatio);
 
     if (payload.model && dom.modelLabel) {
       const suffix = state.hasBackend === false ? " · Static" : "";
@@ -309,6 +326,7 @@ export async function generateImages() {
 
     const baseX = 1720 + Math.random() * 420;
     const baseY = 690 + Math.random() * 360;
+    const dims = displayDimsForRatio(aspectRatio);
 
     for (const src of payload.images || []) {
       createItem({
@@ -317,14 +335,22 @@ export async function generateImages() {
         fit: "contain",
         x: Math.round(baseX + Math.random() * 360),
         y: Math.round(baseY + Math.random() * 280),
-        width: 330,
-        height: 330
+        width: dims.width,
+        height: dims.height,
+        prompt,
+        source: isEdit ? "edit" : "generated"
       });
     }
     recordImages(payload.images?.length || 1);
     scheduleAutoSave();
     const sec = Math.max(1, Math.round((Date.now() - start) / 1000));
     progress.end(`已生成（${sec} 秒）。`);
+
+    // Clear prompt input after a successful run so user can compose the next one.
+    if (dom.promptInput) {
+      dom.promptInput.value = "";
+      dom.promptInput.style.height = "auto";
+    }
   } catch (error) {
     progress.end(`生成失敗：${error.message}`);
   } finally {
