@@ -86,8 +86,23 @@ function buildFinalPrompt(prompt) {
   return `${prompt}\n${PROMPT_SUFFIX}`;
 }
 
-/** Call our own /api/generate proxy (Node host: Zeabur / Render / Vercel functions). */
-async function generateViaBackend(prompt, key) {
+/** Convert any image src (data URL or http URL) to a PNG Blob suitable for the
+ *  OpenAI edits endpoint. */
+async function srcToPngBlob(src) {
+  if (src.startsWith("data:image/png") || src.startsWith("blob:")) {
+    return await (await fetch(src)).blob();
+  }
+  const img = await loadImage(src);
+  const canvas = document.createElement("canvas");
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  canvas.getContext("2d").drawImage(img, 0, 0);
+  return await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+}
+
+/** Call our own /api/generate proxy (Node host). Accepts optional array of
+ *  reference image data URLs — server forwards to /v1/images/edits when present. */
+async function generateViaBackend(prompt, key, referenceSrcs = []) {
   const headers = { "Content-Type": "application/json" };
   if (key) headers["X-OpenAI-Key"] = key;
   const response = await fetch("/api/generate", {
@@ -98,7 +113,8 @@ async function generateViaBackend(prompt, key) {
       context: "",
       style: "editorial product moodboard",
       aspectRatio: "square",
-      count: 1
+      count: 1,
+      images: referenceSrcs
     })
   });
   const payload = await response.json().catch(() => ({}));
@@ -107,8 +123,33 @@ async function generateViaBackend(prompt, key) {
 }
 
 /** Call OpenAI Images API directly from the browser. Used in static deploy. */
-async function generateDirect(prompt, key) {
+async function generateDirect(prompt, key, referenceSrcs = []) {
   const model = (dom.modelLabel?.textContent || "gpt-image-2").replace(/\s·.+$/, "").trim();
+
+  // Edit mode (image + prompt) — gpt-image-2 accepts multiple `image` parts.
+  if (referenceSrcs.length) {
+    const formData = new FormData();
+    for (let i = 0; i < referenceSrcs.length; i += 1) {
+      const blob = await srcToPngBlob(referenceSrcs[i]);
+      formData.append("image", blob, `input${i}.png`);
+    }
+    formData.append("prompt", buildFinalPrompt(prompt));
+    formData.append("model", model);
+    formData.append("n", "1");
+    formData.append("size", "1024x1024");
+    const response = await fetch("https://api.openai.com/v1/images/edits", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}` },
+      body: formData
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error?.message || "OpenAI image edit failed.");
+    const images = (payload.data || [])
+      .map((item) => (item.b64_json ? `data:image/png;base64,${item.b64_json}` : item.url))
+      .filter(Boolean);
+    return { images, model, revisedPrompt: payload.data?.[0]?.revised_prompt };
+  }
+
   const response = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
     headers: {
@@ -139,7 +180,7 @@ async function generateDirect(prompt, key) {
 // User can dismiss the confirm dialog for the rest of the session.
 let skipConfirmThisSession = false;
 
-function confirmGenerate(prompt) {
+function confirmGenerate(prompt, referenceItems = []) {
   return new Promise((resolve) => {
     const modal = document.querySelector("#generateConfirmModal");
     const okBtn = document.querySelector("#confirmGenerateOk");
@@ -147,14 +188,40 @@ function confirmGenerate(prompt) {
     const skipBox = document.querySelector("#confirmSkipNext");
     const promptText = document.querySelector("#confirmPromptText");
     const modelText = document.querySelector("#confirmModelText");
+    const titleText = modal?.querySelector(".api-modal-title");
     if (!modal || !okBtn || !cancelBtn) return resolve(true);
 
+    const hasRefs = referenceItems.length > 0;
     if (promptText) promptText.textContent = prompt.length > 120 ? `${prompt.slice(0, 120)}…` : prompt;
     if (modelText) modelText.textContent = (dom.modelLabel?.textContent || "gpt-image-2").replace(/\s·.+$/, "");
+    if (titleText) {
+      titleText.textContent = hasRefs ? `以 ${referenceItems.length} 張選取圖編輯？` : "確認生成圖片？";
+    }
     const costText = document.querySelector("#confirmCostText");
     if (costText) {
-      const twd = (0.04 * USD_TO_TWD).toFixed(1); // 0.04 USD × 32 = 1.3
+      const twd = (0.04 * USD_TO_TWD).toFixed(1); // 0.04 USD × 32 ≈ 1.3
       costText.textContent = `NT$ ${twd}`;
+    }
+    // Reference thumbnails row — added/updated in edit mode, hidden otherwise.
+    let refRow = modal.querySelector(".confirm-ref-row");
+    if (hasRefs) {
+      if (!refRow) {
+        refRow = document.createElement("div");
+        refRow.className = "confirm-row confirm-ref-row";
+        refRow.innerHTML = '<span class="confirm-label">參考圖</span><span class="confirm-value confirm-ref-value"></span>';
+        modal.querySelector(".api-modal-card").insertBefore(refRow, modal.querySelector(".confirm-skip"));
+      }
+      const valueEl = refRow.querySelector(".confirm-ref-value");
+      valueEl.innerHTML = referenceItems
+        .slice(0, 8)
+        .map((it) => `<img class="confirm-ref-thumb" src="${it.src}" alt="reference">`)
+        .join("");
+      if (referenceItems.length > 8) {
+        valueEl.innerHTML += `<span class="confirm-ref-more">+${referenceItems.length - 8}</span>`;
+      }
+      refRow.hidden = false;
+    } else if (refRow) {
+      refRow.hidden = true;
     }
     if (skipBox) skipBox.checked = false;
     modal.hidden = false;
@@ -200,19 +267,30 @@ export async function generateImages() {
     return;
   }
 
+  // Selected images on the board become reference inputs for image-edit mode.
+  const referenceItems = getSelectedItems().filter(
+    (item) => ["image", "layer"].includes(item.type) && item.src
+  );
+  const referenceSrcs = referenceItems.map((item) => item.src);
+  const isEdit = referenceSrcs.length > 0;
+
   if (!skipConfirmThisSession) {
-    const ok = await confirmGenerate(prompt);
+    const ok = await confirmGenerate(prompt, referenceItems);
     if (!ok) return;
   }
 
   setLoading(true);
   const start = Date.now();
-  const progress = showLoadingProgress("生成中… 0 秒");
+  const initialLabel = isEdit
+    ? `以 ${referenceSrcs.length} 張參考圖編輯中… 0 秒`
+    : "生成中… 0 秒";
+  const progress = showLoadingProgress(initialLabel);
   const tick = window.setInterval(() => {
     const sec = Math.floor((Date.now() - start) / 1000);
+    const verb = isEdit ? "編輯" : "生成";
     const label =
-      sec < 8 ? `生成中… ${sec} 秒` :
-      sec < 20 ? `生成中… ${sec} 秒（OpenAI 通常 15–25 秒）` :
+      sec < 8 ? `${verb}中… ${sec} 秒` :
+      sec < 20 ? `${verb}中… ${sec} 秒（OpenAI 通常 15–25 秒）` :
       sec < 40 ? `仍在等 OpenAI 回應… ${sec} 秒` :
       `${sec} 秒，OpenAI 可能塞車中，請耐心等`;
     progress.update(label);
@@ -221,8 +299,8 @@ export async function generateImages() {
   try {
     const payload =
       state.hasBackend === false
-        ? await generateDirect(prompt, key)
-        : await generateViaBackend(prompt, key);
+        ? await generateDirect(prompt, key, referenceSrcs)
+        : await generateViaBackend(prompt, key, referenceSrcs);
 
     if (payload.model && dom.modelLabel) {
       const suffix = state.hasBackend === false ? " · Static" : "";

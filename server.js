@@ -2,6 +2,7 @@ import http from "node:http";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Buffer, Blob } from "node:buffer";
 
 // ---------- Config ----------
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -9,7 +10,7 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT) || 3000;
 const IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || "gpt-image-2";
-const MAX_BODY_BYTES = 1_000_000;
+const MAX_BODY_BYTES = 32_000_000; // raised to accommodate base64-encoded reference images
 const MAX_GEN_COUNT = 4;
 
 const MIME_TYPES = {
@@ -112,21 +113,44 @@ async function handleGenerate(req, res) {
   const count = Math.max(1, Math.min(Number(body.count) || 1, MAX_GEN_COUNT));
   const size = normalizeSize(body.aspectRatio);
   const finalPrompt = buildPrompt({ prompt, style, context });
+  const referenceSrcs = Array.isArray(body.images) ? body.images.filter(Boolean) : [];
 
   try {
-    const upstream = await fetch("https://api.openai.com/v1/images/generations", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: IMAGE_MODEL,
-        prompt: finalPrompt,
-        size,
-        n: count
-      })
-    });
+    let upstream;
+    if (referenceSrcs.length) {
+      // Image-edit mode: forward multipart to /v1/images/edits.
+      const formData = new FormData();
+      for (let i = 0; i < referenceSrcs.length; i += 1) {
+        const dataUrl = String(referenceSrcs[i]);
+        const match = dataUrl.match(/^data:(image\/[a-z+]+);base64,(.+)$/i);
+        if (!match) continue;
+        const blob = new Blob([Buffer.from(match[2], "base64")], { type: match[1] });
+        formData.append("image", blob, `input${i}.png`);
+      }
+      formData.append("prompt", finalPrompt);
+      formData.append("model", IMAGE_MODEL);
+      formData.append("n", String(count));
+      formData.append("size", size);
+      upstream = await fetch("https://api.openai.com/v1/images/edits", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}` },
+        body: formData
+      });
+    } else {
+      upstream = await fetch("https://api.openai.com/v1/images/generations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: IMAGE_MODEL,
+          prompt: finalPrompt,
+          size,
+          n: count
+        })
+      });
+    }
 
     const payload = await upstream.json().catch(() => ({}));
     if (!upstream.ok) {
