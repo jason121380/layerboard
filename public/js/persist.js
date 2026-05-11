@@ -80,8 +80,18 @@ export async function loadBoard() {
     const idb = await openDb();
     return await new Promise((resolve, reject) => {
       const tx = idb.transaction(STORE, "readonly");
-      const req = tx.objectStore(STORE).get(itemsKey());
-      req.onsuccess = () => resolve(req.result || []);
+      const store = tx.objectStore(STORE);
+      const req = store.get(itemsKey());
+      req.onsuccess = () => {
+        if (req.result && Array.isArray(req.result) && req.result.length) {
+          resolve(req.result);
+          return;
+        }
+        // Legacy fallback: pre-namespace boards were stored under "items".
+        const legacyReq = store.get("items");
+        legacyReq.onsuccess = () => resolve(legacyReq.result || []);
+        legacyReq.onerror = () => resolve([]);
+      };
       req.onerror = () => reject(req.error);
     });
   } catch (err) {
