@@ -41,7 +41,7 @@ export const state = {
   selectedIds: new Set(),
   primarySelectedId: null,
   zCounter: 10,
-  layerMode: "subject",
+  layerMode: "auto",
   mixerHeight: 130,
   suppressMixerClick: false,
   toastTimer: null
