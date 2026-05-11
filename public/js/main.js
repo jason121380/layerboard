@@ -253,21 +253,11 @@ function bindEvents() {
   const aspectToggle = document.querySelector("#aspectMenuBtn");
   const aspectMenu = document.querySelector("#aspectMenu");
   const aspectLabel = document.querySelector("#aspectMenuLabel");
-  const aspectIcon = aspectToggle?.querySelector(".aspect-icon");
 
   function setAspectRatio(ratio) {
     state.aspectRatio = ratio;
-    const map = {
-      square: { label: "1:1", iconClass: "aspect-icon-1-1" },
-      portrait: { label: "9:16", iconClass: "aspect-icon-9-16" },
-      landscape: { label: "16:9", iconClass: "aspect-icon-16-9" }
-    };
-    const cfg = map[ratio] || map.square;
-    if (aspectLabel) aspectLabel.textContent = cfg.label;
-    if (aspectIcon) {
-      aspectIcon.classList.remove("aspect-icon-1-1", "aspect-icon-9-16", "aspect-icon-16-9");
-      aspectIcon.classList.add(cfg.iconClass);
-    }
+    const labels = { square: "1:1", portrait: "9:16", landscape: "16:9" };
+    if (aspectLabel) aspectLabel.textContent = labels[ratio] || "1:1";
     aspectMenu?.querySelectorAll(".aspect-menu-item").forEach((b) => {
       b.classList.toggle("active", b.dataset.ratio === ratio);
     });
