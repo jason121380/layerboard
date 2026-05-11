@@ -636,6 +636,26 @@ textarea, select, input[type="range"] { width: 100%; }
 }
 .confirm-cost strong { color: var(--violet); font-size: 15px; }
 .confirm-cost-note { color: var(--muted); font-weight: 500; font-size: 12px; }
+.confirm-ref-value { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.confirm-ref-thumb {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid rgba(38, 37, 42, 0.1);
+}
+.confirm-ref-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  background: #f0f1f5;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
 .confirm-skip {
   display: flex;
   align-items: center;
