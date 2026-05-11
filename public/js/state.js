@@ -46,8 +46,19 @@ export const state = {
   suppressMixerClick: false,
   toastTimer: null,
   // null = unknown (pre-probe), true = /api/* available, false = static deploy.
-  hasBackend: null
+  hasBackend: null,
+  // Board viewport: composed transform = translate(centre + pan) · scale.
+  boardScale: 1,
+  boardPanX: 0,
+  boardPanY: 0
 };
+
+export function applyBoardTransform() {
+  if (!dom.board) return;
+  const { boardScale, boardPanX, boardPanY } = state;
+  dom.board.style.transform =
+    `translate(calc(-50% + ${boardPanX}px), calc(-50% + ${boardPanY}px)) scale(${boardScale})`;
+}
 
 export function bumpZ() {
   state.zCounter += 1;
