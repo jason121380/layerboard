@@ -1,33 +1,24 @@
 /**
- * persist.js — IndexedDB autosave / restore for board state.
+ * persist.js — cloud-sync board state via PUT/GET /api/board.
+ *
+ * Identity is the SHA-256 of the user's OpenAI key on the server side. With no
+ * key (or no backend), loads return empty and saves no-op.
  */
 
 import { state } from "./state.js";
-import { getNamespace } from "./namespace.js";
 
-const DB_NAME = "layerboard";
-const DB_VERSION = 1;
-const STORE = "board";
-// Per-namespace key so different API keys keep separate boards.
-function itemsKey() { return `items__${getNamespace()}`; }
-
-let db = null;
 let saveTimer = null;
+let saveInFlight = null;
+let queuedSave = false;
 
-// ---------- Open DB ----------
-function openDb() {
-  if (db) return Promise.resolve(db);
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = (e) => {
-      e.target.result.createObjectStore(STORE);
-    };
-    req.onsuccess = (e) => { db = e.target.result; resolve(db); };
-    req.onerror = () => reject(req.error);
-  });
+function getKey() {
+  return localStorage.getItem("openai_api_key") || "";
 }
 
-// ---------- Serialise items (no DOM refs) ----------
+function canSync() {
+  return state.hasBackend !== false && !!getKey();
+}
+
 function serialise() {
   return state.items.map((item) => ({
     id: item.id,
@@ -53,20 +44,35 @@ function serialise() {
   }));
 }
 
-// ---------- Save ----------
 async function saveNow() {
-  try {
-    const idb = await openDb();
-    const data = serialise();
-    await new Promise((resolve, reject) => {
-      const tx = idb.transaction(STORE, "readwrite");
-      tx.objectStore(STORE).put(data, itemsKey());
-      tx.oncomplete = resolve;
-      tx.onerror = () => reject(tx.error);
-    });
-  } catch (err) {
-    console.warn("[persist] save failed:", err);
+  if (!canSync()) return;
+  if (saveInFlight) {
+    queuedSave = true;
+    return;
   }
+  const items = serialise();
+  saveInFlight = (async () => {
+    try {
+      const res = await fetch("/api/board", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "X-OpenAI-Key": getKey()
+        },
+        body: JSON.stringify({ items })
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+    } catch (err) {
+      console.warn("[persist] cloud save failed:", err);
+    } finally {
+      saveInFlight = null;
+      if (queuedSave) {
+        queuedSave = false;
+        scheduleAutoSave();
+      }
+    }
+  })();
+  await saveInFlight;
 }
 
 export function scheduleAutoSave() {
@@ -74,28 +80,17 @@ export function scheduleAutoSave() {
   saveTimer = setTimeout(saveNow, 600);
 }
 
-// ---------- Load ----------
 export async function loadBoard() {
+  if (!canSync()) return [];
   try {
-    const idb = await openDb();
-    return await new Promise((resolve, reject) => {
-      const tx = idb.transaction(STORE, "readonly");
-      const store = tx.objectStore(STORE);
-      const req = store.get(itemsKey());
-      req.onsuccess = () => {
-        if (req.result && Array.isArray(req.result) && req.result.length) {
-          resolve(req.result);
-          return;
-        }
-        // Legacy fallback: pre-namespace boards were stored under "items".
-        const legacyReq = store.get("items");
-        legacyReq.onsuccess = () => resolve(legacyReq.result || []);
-        legacyReq.onerror = () => resolve([]);
-      };
-      req.onerror = () => reject(req.error);
+    const res = await fetch("/api/board", {
+      headers: { "X-OpenAI-Key": getKey() }
     });
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const data = await res.json();
+    return Array.isArray(data.items) ? data.items : [];
   } catch (err) {
-    console.warn("[persist] load failed:", err);
+    console.warn("[persist] cloud load failed:", err);
     return [];
   }
 }

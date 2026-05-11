@@ -1,48 +1,80 @@
 /**
- * generation-log.js — persisted log of every image-generation attempt for debugging.
+ * generation-log.js — cloud-sync log of every image generation attempt.
+ *
+ * Maintains an in-memory cache so callers stay synchronous; mutations debounce
+ * a PUT to /api/log on the server (identity = SHA-256 of the OpenAI key).
  */
 
-import { namespaced } from "./namespace.js";
+import { state } from "./state.js";
 
 const MAX_ENTRIES = 100;
-function logKey() { return namespaced("layerboard_generation_log"); }
+let cache = [];
+let initPromise = null;
+let saveTimer = null;
+
+function getKey() {
+  return localStorage.getItem("openai_api_key") || "";
+}
+
+function canSync() {
+  return state.hasBackend !== false && !!getKey();
+}
+
+export async function initLog() {
+  if (initPromise) return initPromise;
+  initPromise = (async () => {
+    if (!canSync()) { cache = []; return; }
+    try {
+      const res = await fetch("/api/log", {
+        headers: { "X-OpenAI-Key": getKey() }
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const data = await res.json();
+      cache = Array.isArray(data.entries) ? data.entries : [];
+    } catch (err) {
+      console.warn("[log] cloud load failed:", err);
+      cache = [];
+    }
+  })();
+  return initPromise;
+}
+
+export function resetLogCache() {
+  cache = [];
+  initPromise = null;
+}
+
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNow, 400);
+}
+
+async function saveNow() {
+  if (!canSync()) return;
+  try {
+    await fetch("/api/log", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "X-OpenAI-Key": getKey()
+      },
+      body: JSON.stringify({ entries: cache.slice(0, MAX_ENTRIES) })
+    });
+  } catch (err) {
+    console.warn("[log] cloud save failed:", err);
+  }
+}
 
 export function readLog() {
-  try {
-    let raw = localStorage.getItem(logKey());
-    // Legacy fallback: pre-namespace logs lived at the un-suffixed key.
-    if (!raw) raw = localStorage.getItem("layerboard_generation_log");
-    return JSON.parse(raw || "[]");
-  } catch {
-    return [];
-  }
+  return cache.slice();
 }
 
-function writeLog(entries) {
-  try {
-    localStorage.setItem(logKey(), JSON.stringify(entries.slice(0, MAX_ENTRIES)));
-    localStorage.removeItem("layerboard_generation_log");
-  } catch {
-    // Likely quota exceeded — drop the oldest entries until it fits.
-    try {
-      localStorage.setItem(logKey(), JSON.stringify(entries.slice(0, Math.floor(MAX_ENTRIES / 2))));
-    } catch {}
-  }
-}
-
-/** Append a new entry to the log. Returns the entry id so callers can later
- *  update it (start → success / failed). */
 export function logStart(meta) {
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const entry = {
-    id,
-    time: Date.now(),
-    status: "pending",
-    ...meta
-  };
-  const list = readLog();
-  list.unshift(entry);
-  writeLog(list);
+  const entry = { id, time: Date.now(), status: "pending", ...meta };
+  cache.unshift(entry);
+  if (cache.length > MAX_ENTRIES) cache.length = MAX_ENTRIES;
+  scheduleSave();
   if (typeof console !== "undefined") {
     console.log("[layerboard] generation start", entry);
   }
@@ -50,17 +82,25 @@ export function logStart(meta) {
 }
 
 export function logEnd(id, patch) {
-  const list = readLog();
-  const idx = list.findIndex((e) => e.id === id);
+  const idx = cache.findIndex((e) => e.id === id);
   if (idx === -1) return;
-  list[idx] = { ...list[idx], ...patch };
-  writeLog(list);
+  cache[idx] = { ...cache[idx], ...patch };
+  scheduleSave();
   if (typeof console !== "undefined") {
-    if (patch.status === "failed") console.error("[layerboard] generation failed", list[idx]);
-    else console.log("[layerboard] generation ok", list[idx]);
+    if (patch.status === "failed") console.error("[layerboard] generation failed", cache[idx]);
+    else console.log("[layerboard] generation ok", cache[idx]);
   }
 }
 
-export function clearLog() {
-  localStorage.removeItem(logKey());
+export async function clearLog() {
+  cache = [];
+  if (!canSync()) return;
+  try {
+    await fetch("/api/log", {
+      method: "DELETE",
+      headers: { "X-OpenAI-Key": getKey() }
+    });
+  } catch (err) {
+    console.warn("[log] cloud clear failed:", err);
+  }
 }
