@@ -149,15 +149,58 @@ function bindEvents() {
 
   document.querySelector("#mixerSelectionClear")?.addEventListener("click", clearSelection);
 
-  // Aspect ratio segmented buttons.
-  const aspectGroup = document.querySelector(".aspect-ratio-group");
-  aspectGroup?.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-ratio]");
-    if (!btn) return;
-    state.aspectRatio = btn.dataset.ratio || "square";
-    aspectGroup.querySelectorAll(".aspect-btn").forEach((b) => {
-      b.classList.toggle("active", b === btn);
+  // Aspect ratio dropdown — toggle button + menu inside the input row.
+  const aspectToggle = document.querySelector("#aspectMenuBtn");
+  const aspectMenu = document.querySelector("#aspectMenu");
+  const aspectLabel = document.querySelector("#aspectMenuLabel");
+  const aspectIcon = aspectToggle?.querySelector(".aspect-icon");
+
+  function setAspectRatio(ratio) {
+    state.aspectRatio = ratio;
+    const map = {
+      square: { label: "1:1", iconClass: "aspect-icon-1-1" },
+      portrait: { label: "9:16", iconClass: "aspect-icon-9-16" },
+      landscape: { label: "16:9", iconClass: "aspect-icon-16-9" }
+    };
+    const cfg = map[ratio] || map.square;
+    if (aspectLabel) aspectLabel.textContent = cfg.label;
+    if (aspectIcon) {
+      aspectIcon.classList.remove("aspect-icon-1-1", "aspect-icon-9-16", "aspect-icon-16-9");
+      aspectIcon.classList.add(cfg.iconClass);
+    }
+    aspectMenu?.querySelectorAll(".aspect-menu-item").forEach((b) => {
+      b.classList.toggle("active", b.dataset.ratio === ratio);
     });
+  }
+
+  function closeAspectMenu() {
+    if (!aspectMenu) return;
+    aspectMenu.hidden = true;
+    aspectToggle?.setAttribute("aria-expanded", "false");
+  }
+
+  aspectToggle?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!aspectMenu) return;
+    const isOpen = !aspectMenu.hidden;
+    aspectMenu.hidden = isOpen;
+    aspectToggle.setAttribute("aria-expanded", String(!isOpen));
+  });
+
+  aspectMenu?.addEventListener("click", (e) => {
+    const item = e.target.closest("[data-ratio]");
+    if (!item) return;
+    setAspectRatio(item.dataset.ratio);
+    closeAspectMenu();
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!aspectMenu || aspectMenu.hidden) return;
+    if (e.target.closest("#aspectMenu") || e.target.closest("#aspectMenuBtn")) return;
+    closeAspectMenu();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeAspectMenu();
   });
 
   // "查看提示詞" button on selection bar.

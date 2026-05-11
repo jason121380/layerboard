@@ -119,19 +119,23 @@
           <span id="mixerSelectionLabel" class="mixer-selection-label">已選 0 張作為參考</span>
           <button id="mixerSelectionClear" type="button" aria-label="取消選取" title="取消選取">×</button>
         </div>
-        <div class="aspect-ratio-group" role="radiogroup" aria-label="輸出尺寸">
-          <button class="aspect-btn active" type="button" data-ratio="square" aria-label="1 比 1">
-            <span class="aspect-icon aspect-icon-1-1"></span><span>1:1</span>
-          </button>
-          <button class="aspect-btn" type="button" data-ratio="portrait" aria-label="9 比 16 直式">
-            <span class="aspect-icon aspect-icon-9-16"></span><span>9:16</span>
-          </button>
-          <button class="aspect-btn" type="button" data-ratio="landscape" aria-label="16 比 9 橫式">
-            <span class="aspect-icon aspect-icon-16-9"></span><span>16:9</span>
-          </button>
-        </div>
         <div class="mixer-input-row">
           <textarea id="promptInput" rows="1" placeholder="你想要生成什麼呢"></textarea>
+          <button id="aspectMenuBtn" class="mixer-icon-btn aspect-toggle" type="button" title="輸出尺寸" aria-label="輸出尺寸" aria-haspopup="true" aria-expanded="false">
+            <span class="aspect-icon aspect-icon-1-1"></span>
+            <span id="aspectMenuLabel" class="aspect-toggle-label">1:1</span>
+          </button>
+          <div id="aspectMenu" class="aspect-menu" role="menu" hidden>
+            <button class="aspect-menu-item active" type="button" data-ratio="square" role="menuitem">
+              <span class="aspect-icon aspect-icon-1-1"></span><span>1:1</span><span class="aspect-menu-hint">方形</span>
+            </button>
+            <button class="aspect-menu-item" type="button" data-ratio="portrait" role="menuitem">
+              <span class="aspect-icon aspect-icon-9-16"></span><span>9:16</span><span class="aspect-menu-hint">直式</span>
+            </button>
+            <button class="aspect-menu-item" type="button" data-ratio="landscape" role="menuitem">
+              <span class="aspect-icon aspect-icon-16-9"></span><span>16:9</span><span class="aspect-menu-hint">橫式</span>
+            </button>
+          </div>
           <button id="uploadBtn" class="mixer-icon-btn" type="button" title="Upload image" aria-label="Upload image">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
