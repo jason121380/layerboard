@@ -42,6 +42,12 @@ const TESSERACT_CDN = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tess
 const OCR_LANGS = ["eng", "chi_tra"];
 const OCR_MIN_CONFIDENCE = 55;
 
+// Replicate SAM 2 — multi-object instance segmentation. Model can be
+// overridden via localStorage.replicate_model if a different SAM endpoint is
+// preferred. The default ships as a community automatic-mask SAM 2 model.
+const REPLICATE_API = "https://api.replicate.com/v1";
+const DEFAULT_SAM_MODEL = "lucataco/segment-anything-2";
+
 // ====================================================================
 // Shared helpers
 // ====================================================================
@@ -801,8 +807,150 @@ async function runAutoMode(selected) {
   return out;
 }
 
+// ====================================================================
+// Mode 5: SAM — Replicate-hosted Segment Anything 2 (multi-mask)
+// ====================================================================
+
+function getReplicateToken() {
+  return localStorage.getItem("replicate_api_token") || "";
+}
+
+function normaliseSamOutput(output) {
+  if (!output) return [];
+  if (typeof output === "string") return [output];
+  if (Array.isArray(output)) {
+    // Either an array of URLs, or an array of objects like { mask: "url" }.
+    return output
+      .map((o) => (typeof o === "string" ? o : (o?.mask || o?.url || o?.image || null)))
+      .filter(Boolean);
+  }
+  if (Array.isArray(output.masks)) return normaliseSamOutput(output.masks);
+  if (Array.isArray(output.individual_masks)) return normaliseSamOutput(output.individual_masks);
+  if (typeof output.combined_mask === "string") return [output.combined_mask];
+  return [];
+}
+
+/**
+ * Composite a binary mask PNG with the source image to produce an
+ * alpha-cutout layer (only mask region is opaque). Returns null when the
+ * mask is empty/transparent.
+ */
+async function composeMaskedLayer(srcImage, maskUrl, index) {
+  const maskImage = await loadImage(maskUrl);
+  const w = srcImage.naturalWidth;
+  const h = srcImage.naturalHeight;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(srcImage, 0, 0);
+  ctx.globalCompositeOperation = "destination-in";
+  ctx.drawImage(maskImage, 0, 0, w, h);
+
+  // Find bbox of non-transparent pixels to crop output and report area.
+  const data = ctx.getImageData(0, 0, w, h).data;
+  let minX = w, minY = h, maxX = -1, maxY = -1, area = 0;
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      if (data[(y * w + x) * 4 + 3] > 16) {
+        area += 1;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < 0 || area / (w * h) < 0.003) return null;
+
+  // Crop tighter for a manageable item size.
+  const cropW = maxX - minX + 1;
+  const cropH = maxY - minY + 1;
+  const cropped = document.createElement("canvas");
+  cropped.width = cropW;
+  cropped.height = cropH;
+  cropped.getContext("2d").drawImage(canvas, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
+
+  return {
+    src: cropped.toDataURL("image/png"),
+    x: minX,
+    y: minY,
+    width: cropW,
+    height: cropH,
+    kind: "object",
+    objectIndex: index + 1,
+    sourceWidth: w,
+    sourceHeight: h,
+    area
+  };
+}
+
+async function runSamMode(selected, onProgress) {
+  const token = getReplicateToken();
+  if (!token) throw new Error("尚未設定 Replicate Token");
+  const model = localStorage.getItem("replicate_model") || DEFAULT_SAM_MODEL;
+
+  onProgress?.("SAM 啟動中…");
+  const startResp = await fetch(`${REPLICATE_API}/models/${model}/predictions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Prefer: "wait=60"
+    },
+    body: JSON.stringify({
+      input: {
+        image: selected.src
+      }
+    })
+  });
+  let payload = await startResp.json().catch(() => ({}));
+  if (!startResp.ok) {
+    throw new Error(payload?.detail || payload?.title || `Replicate ${startResp.status}`);
+  }
+
+  // Poll if not yet completed.
+  while (payload.status && payload.status !== "succeeded" && payload.status !== "failed" && payload.status !== "canceled") {
+    onProgress?.(`SAM ${payload.status}…`);
+    await new Promise((r) => setTimeout(r, 1800));
+    const pollUrl = payload.urls?.get;
+    if (!pollUrl) break;
+    const r = await fetch(pollUrl, { headers: { Authorization: `Bearer ${token}` } });
+    payload = await r.json().catch(() => ({}));
+  }
+  if (payload.status !== "succeeded") {
+    throw new Error(payload.error || `SAM ${payload.status || "unknown"}`);
+  }
+
+  const maskUrls = normaliseSamOutput(payload.output);
+  if (!maskUrls.length) throw new Error("SAM 沒回傳任何 mask");
+
+  onProgress?.(`合成 ${maskUrls.length} 個圖層…`);
+  const sourceImage = await loadImage(selected.src);
+  const layers = [];
+  for (let i = 0; i < maskUrls.length; i += 1) {
+    const layer = await composeMaskedLayer(sourceImage, maskUrls[i], i);
+    if (layer) layers.push(layer);
+  }
+  layers.sort((a, b) => b.area - a.area);
+  return layers.slice(0, 12); // cap to avoid clutter
+}
+
 async function runForMode(selected, mode) {
-  if (mode === "auto") return runAutoMode(selected);
+  if (mode === "sam") return runSamMode(selected, (msg) => ocrProgressHook?.(msg));
+  if (mode === "auto") {
+    // Auto picks SAM when a Replicate token is set, otherwise uses the local
+    // OCR + saliency pipeline.
+    if (getReplicateToken()) {
+      try {
+        return await runSamMode(selected, (msg) => ocrProgressHook?.(msg));
+      } catch (err) {
+        console.warn("[magic-layer] SAM failed, falling back:", err.message);
+        ocrProgressHook?.(`SAM 失敗，改用本地演算法（${err.message}）`);
+      }
+    }
+    return runAutoMode(selected);
+  }
   if (mode === "palette") return runPaletteMode(selected);
   if (mode === "text") return runTextGraphMode(selected);
   return runSubjectMode(selected);

@@ -26,11 +26,18 @@
         </button>
       </header>
 
-      <!-- ===== API Key Modal ===== -->
-      <div id="apiKeyModal" class="api-modal" role="dialog" aria-modal="true" aria-label="Set API Key" hidden>
+      <!-- ===== API Keys Modal ===== -->
+      <div id="apiKeyModal" class="api-modal" role="dialog" aria-modal="true" aria-label="Set API keys" hidden>
         <div class="api-modal-card">
-          <p class="api-modal-title">OpenAI API Key</p>
-          <input id="apiKeyInput" class="api-modal-input" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false" />
+          <p class="api-modal-title">API 金鑰</p>
+          <label class="api-modal-field">
+            <span class="api-modal-field-label">OpenAI API Key <small>（圖片生成 / 編輯）</small></span>
+            <input id="apiKeyInput" class="api-modal-input" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false" />
+          </label>
+          <label class="api-modal-field">
+            <span class="api-modal-field-label">Replicate API Token <small>（Magic Layer SAM 2，選填）</small></span>
+            <input id="replicateKeyInput" class="api-modal-input" type="password" placeholder="r8_..." autocomplete="off" spellcheck="false" />
+          </label>
           <div class="api-modal-actions">
             <button id="apiKeySave" class="api-modal-save" type="button">儲存</button>
             <button id="apiKeyCancel" class="api-modal-cancel" type="button">取消</button>
@@ -94,6 +101,11 @@
 
       <!-- ===== Mixer card (prompt panel) ===== -->
       <section class="mixer-card visible" aria-label="Mixboard prompt">
+        <div id="mixerSelectionChip" class="mixer-selection-chip" hidden>
+          <div id="mixerSelectionThumbs" class="mixer-selection-thumbs"></div>
+          <span id="mixerSelectionLabel" class="mixer-selection-label">已選 0 張作為參考</span>
+          <button id="mixerSelectionClear" type="button" aria-label="取消選取" title="取消選取">×</button>
+        </div>
         <div class="mixer-input-row">
           <textarea id="promptInput" rows="1" placeholder="你想要生成什麼呢"></textarea>
           <button id="uploadBtn" class="mixer-icon-btn" type="button" title="Upload image" aria-label="Upload image">
