@@ -383,7 +383,7 @@ async function init() {
   setMixerHeight(state.mixerHeight);
   fitBoard(true);
   renderLayerPanel();
-  loadHealth();
+  await loadHealth(); // resolve hasBackend before user can hit the generate button
   renderUsage();
 
   // 還原上次 board
