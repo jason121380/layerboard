@@ -830,6 +830,103 @@ textarea, select, input[type="range"] { width: 100%; }
 }
 .confirm-skip input { margin: 0; }
 
+/* Generation log modal */
+.history-card {
+  width: min(640px, calc(100vw - 40px));
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+}
+.history-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.history-filters { display: flex; gap: 4px; margin-left: auto; }
+.history-filter {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #f0f1f5;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.history-filter.active { background: var(--violet); color: #fff; }
+.history-list {
+  flex: 1;
+  min-height: 200px;
+  max-height: 460px;
+  overflow-y: auto;
+  margin: 0 -4px 12px;
+  padding: 0 4px;
+}
+.history-empty {
+  display: grid;
+  place-items: center;
+  height: 200px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.log-entry {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border: 1px solid #eef0f4;
+  border-radius: 12px;
+  background: #fbfbfd;
+}
+.log-status {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+}
+.log-status-success { background: #28a745; }
+.log-status-failed { background: #e74c3c; }
+.log-status-pending { background: #f6a623; }
+.log-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.log-time { font-weight: 600; color: var(--ink); }
+.log-tag {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.05);
+  font-weight: 600;
+}
+.log-tag.tag-error { background: rgba(231, 76, 60, 0.12); color: #c0392b; }
+.log-tag.tag-success { background: rgba(40, 167, 69, 0.12); color: #1e8c3a; }
+.log-prompt {
+  font-size: 12.5px;
+  color: var(--ink);
+  word-break: break-word;
+  line-height: 1.4;
+}
+.log-error {
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(231, 76, 60, 0.08);
+  color: #c0392b;
+  font-family: ui-monospace, "SF Mono", Monaco, Menlo, monospace;
+  font-size: 11.5px;
+  word-break: break-word;
+}
+
 .prompt-view-text {
   max-height: 320px;
   overflow: auto;

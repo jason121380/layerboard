@@ -7,6 +7,7 @@ import { loadImage, wrapText } from "./utils.js";
 import { createItem, getSelectedItems } from "./items.js";
 import { scheduleAutoSave } from "./persist.js";
 import { recordImages, USD_TO_TWD } from "./usage.js";
+import { logStart, logEnd } from "./generation-log.js";
 
 export async function exportSelectedItems() {
   const items = getSelectedItems().filter((i) => i.visible !== false);
@@ -302,6 +303,14 @@ export async function generateImages() {
     ? `以 ${referenceSrcs.length} 張參考圖編輯中… 0 秒`
     : "生成中… 0 秒";
   const progress = showLoadingProgress(initialLabel);
+  const logId = logStart({
+    prompt,
+    mode: isEdit ? "edit" : "generate",
+    referenceCount: referenceSrcs.length,
+    aspectRatio: state.aspectRatio || "square",
+    model: (dom.modelLabel?.textContent || "gpt-image-2").replace(/\s·.+$/, ""),
+    backend: state.hasBackend === true ? "server" : "direct"
+  });
   const tick = window.setInterval(() => {
     const sec = Math.floor((Date.now() - start) / 1000);
     const verb = isEdit ? "編輯" : "生成";
@@ -359,6 +368,12 @@ export async function generateImages() {
     scheduleAutoSave();
     const sec = Math.max(1, Math.round((Date.now() - start) / 1000));
     progress.end(`已生成（${sec} 秒）。`);
+    logEnd(logId, {
+      status: "success",
+      durationMs: Date.now() - start,
+      imageCount: payload.images?.length || 0,
+      revisedPrompt: payload.revisedPrompt || null
+    });
 
     // Clear prompt input after a successful run so user can compose the next one.
     if (dom.promptInput) {
@@ -366,7 +381,12 @@ export async function generateImages() {
       dom.promptInput.style.height = "auto";
     }
   } catch (error) {
-    progress.end(`生成失敗：${error.message}`);
+    progress.end(`生成失敗:${error.message}`);
+    logEnd(logId, {
+      status: "failed",
+      durationMs: Date.now() - start,
+      error: error.message || String(error)
+    });
   } finally {
     window.clearInterval(tick);
     setLoading(false);
