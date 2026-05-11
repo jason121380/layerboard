@@ -275,6 +275,19 @@ textarea, select, input[type="range"] { width: 100%; }
 
 .api-modal-input:focus { border-color: var(--violet); background: #fff; }
 
+.api-modal-field { display: block; margin-bottom: 10px; }
+.api-modal-field-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.api-modal-field-label small {
+  font-weight: 500;
+  color: #a8a8af;
+}
+
 .api-modal-actions {
   display: flex;
   gap: 8px;
@@ -503,6 +516,59 @@ textarea, select, input[type="range"] { width: 100%; }
   0%   { background-position: 0% 50%; }
   50%  { background-position: 100% 50%; }
   100% { background-position: 0% 50%; }
+}
+
+.mixer-selection-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 6px 10px 6px 6px;
+  border: 1px solid rgba(150, 92, 255, 0.25);
+  border-radius: 14px;
+  background: rgba(150, 92, 255, 0.06);
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.mixer-selection-chip[hidden] { display: none; }
+
+.mixer-selection-thumbs {
+  display: flex;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.mixer-selection-thumbs img {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.mixer-selection-thumbs img + img { margin-left: -8px; }
+
+.mixer-selection-label {
+  flex: 1;
+  font-weight: 600;
+  color: var(--violet);
+}
+
+#mixerSelectionClear {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+}
+
+#mixerSelectionClear:hover {
+  background: rgba(150, 92, 255, 0.12);
+  color: var(--violet);
 }
 
 .mixer-input-row {

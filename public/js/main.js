@@ -68,7 +68,8 @@ function handleMixerHandleClick(event) {
 function initApiKeyModal() {
   const chip = document.querySelector(".status-chip");
   const modal = document.querySelector("#apiKeyModal");
-  const input = document.querySelector("#apiKeyInput");
+  const openaiInput = document.querySelector("#apiKeyInput");
+  const replicateInput = document.querySelector("#replicateKeyInput");
   const save = document.querySelector("#apiKeySave");
   const cancel = document.querySelector("#apiKeyCancel");
   if (!chip || !modal) return;
@@ -80,25 +81,31 @@ function initApiKeyModal() {
 
   chip.style.cursor = "pointer";
   chip.addEventListener("click", () => {
-    input.value = localStorage.getItem("openai_api_key") || "";
+    if (openaiInput) openaiInput.value = localStorage.getItem("openai_api_key") || "";
+    if (replicateInput) replicateInput.value = localStorage.getItem("replicate_api_token") || "";
     modal.hidden = false;
-    input.focus();
+    openaiInput?.focus();
   });
 
   save.addEventListener("click", () => {
-    saveApiKey(input.value);
+    saveApiKey(openaiInput?.value || "");
+    const rkey = (replicateInput?.value || "").trim();
+    if (rkey) localStorage.setItem("replicate_api_token", rkey);
+    else localStorage.removeItem("replicate_api_token");
     modal.hidden = true;
     updateChipState();
-    showToast("API Key 已儲存。");
+    showToast(rkey ? "Keys 已儲存（含 Replicate）。" : "OpenAI Key 已儲存。");
   });
 
   cancel.addEventListener("click", () => { modal.hidden = true; });
 
   modal.addEventListener("click", (e) => { if (e.target === modal) modal.hidden = true; });
 
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") save.click();
-    if (e.key === "Escape") cancel.click();
+  [openaiInput, replicateInput].forEach((input) => {
+    input?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") save.click();
+      if (e.key === "Escape") cancel.click();
+    });
   });
 
   updateChipState();
@@ -139,6 +146,8 @@ function bindEvents() {
       generateImages();
     }
   });
+
+  document.querySelector("#mixerSelectionClear")?.addEventListener("click", clearSelection);
 
   dom.uploadBtn?.addEventListener("click", () => dom.fileInput?.click());
   dom.fileInput?.addEventListener("change", () => {

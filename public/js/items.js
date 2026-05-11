@@ -103,6 +103,27 @@ export function updateControls() {
     dom.deleteBtn.textContent = isMulti ? `刪除 (${selectedItems.length})` : "刪除";
   }
 
+  // Mixer-card selection chip: shows the user that the bottom prompt will be
+  // applied to these images as reference (image-edit mode).
+  const chip = document.querySelector("#mixerSelectionChip");
+  const label = document.querySelector("#mixerSelectionLabel");
+  const thumbs = document.querySelector("#mixerSelectionThumbs");
+  if (chip) {
+    const refItems = selectedItems.filter((it) => ["image", "layer"].includes(it.type) && it.src);
+    if (refItems.length) {
+      chip.hidden = false;
+      if (label) label.textContent = `已選 ${refItems.length} 張，下方 prompt 會以這些圖為參考`;
+      if (thumbs) {
+        thumbs.innerHTML = refItems
+          .slice(0, 4)
+          .map((it) => `<img src="${it.src}" alt="">`)
+          .join("");
+      }
+    } else {
+      chip.hidden = true;
+    }
+  }
+
   if (hasSelection) repositionSelectionBar();
 }
 
