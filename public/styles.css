@@ -91,7 +91,7 @@ textarea, select, input[type="range"] { width: 100%; }
   min-width: 4200px;
   min-height: 2600px;
   transform-origin: top left;
-  background: var(--surface-soft);
+  background: transparent;
 }
 
 /* Grid lives in viewport space so it covers the whole canvas
