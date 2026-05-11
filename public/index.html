@@ -38,6 +38,32 @@
         </div>
       </div>
 
+      <!-- ===== Generate Confirm Modal ===== -->
+      <div id="generateConfirmModal" class="api-modal" role="dialog" aria-modal="true" aria-label="Confirm generation" hidden>
+        <div class="api-modal-card">
+          <p class="api-modal-title">確認生成圖片？</p>
+          <div class="confirm-row">
+            <span class="confirm-label">Prompt</span>
+            <span id="confirmPromptText" class="confirm-value"></span>
+          </div>
+          <div class="confirm-row">
+            <span class="confirm-label">模型</span>
+            <span id="confirmModelText" class="confirm-value">gpt-image-2</span>
+          </div>
+          <div class="confirm-row">
+            <span class="confirm-label">預估花費</span>
+            <span class="confirm-value confirm-cost"><strong>$0.04 USD</strong> <span class="confirm-cost-note">/ 張（1024×1024 standard）</span></span>
+          </div>
+          <label class="confirm-skip">
+            <input id="confirmSkipNext" type="checkbox" /> 這個 session 內不再詢問
+          </label>
+          <div class="api-modal-actions">
+            <button id="confirmGenerateOk" class="api-modal-save" type="button">確認生成</button>
+            <button id="confirmGenerateCancel" class="api-modal-cancel" type="button">取消</button>
+          </div>
+        </div>
+      </div>
+
 
       <!-- ===== Workspace ===== -->
       <main class="workspace">
