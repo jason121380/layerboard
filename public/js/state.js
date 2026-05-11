@@ -44,7 +44,9 @@ export const state = {
   layerMode: "auto",
   mixerHeight: 130,
   suppressMixerClick: false,
-  toastTimer: null
+  toastTimer: null,
+  // null = unknown (pre-probe), true = /api/* available, false = static deploy.
+  hasBackend: null
 };
 
 export function bumpZ() {
