@@ -175,12 +175,17 @@ function erode(mask, width, height) {
   return out;
 }
 
-/** Keep only the largest connected component above minArea. */
-function largestComponent(mask, width, height) {
+/**
+ * Find all connected components in a binary mask. Returns an array of
+ * { mask, area } sorted by area desc, filtered by minAreaRatio (fraction
+ * of total pixels) and capped at maxCount.
+ */
+function findComponents(mask, width, height, minAreaRatio = 0.008, maxCount = 8) {
+  const total = width * height;
+  const minArea = Math.max(40, Math.round(total * minAreaRatio));
   const visited = new Uint8Array(mask.length);
   const queue = new Int32Array(mask.length);
-  let bestMask = null;
-  let bestArea = 0;
+  const components = [];
 
   for (let start = 0; start < mask.length; start += 1) {
     if (!mask[start] || visited[start]) continue;
@@ -193,26 +198,27 @@ function largestComponent(mask, width, height) {
       const idx = queue[head++];
       const x = idx % width;
       const y = Math.floor(idx / width);
-      const neighbours = [];
-      if (x > 0) neighbours.push(idx - 1);
-      if (x < width - 1) neighbours.push(idx + 1);
-      if (y > 0) neighbours.push(idx - width);
-      if (y < height - 1) neighbours.push(idx + width);
-      for (const n of neighbours) {
-        if (visited[n] || !mask[n]) continue;
-        visited[n] = 1;
-        queue[tail++] = n;
-      }
+      if (x > 0 && mask[idx - 1] && !visited[idx - 1]) { visited[idx - 1] = 1; queue[tail++] = idx - 1; }
+      if (x < width - 1 && mask[idx + 1] && !visited[idx + 1]) { visited[idx + 1] = 1; queue[tail++] = idx + 1; }
+      if (y > 0 && mask[idx - width] && !visited[idx - width]) { visited[idx - width] = 1; queue[tail++] = idx - width; }
+      if (y < height - 1 && mask[idx + width] && !visited[idx + width]) { visited[idx + width] = 1; queue[tail++] = idx + width; }
     }
 
-    if (tail > bestArea) {
-      bestArea = tail;
-      bestMask = new Uint8Array(mask.length);
-      for (let i = 0; i < tail; i += 1) bestMask[queue[i]] = 1;
+    if (tail >= minArea) {
+      const m = new Uint8Array(mask.length);
+      for (let i = 0; i < tail; i += 1) m[queue[i]] = 1;
+      components.push({ mask: m, area: tail });
     }
   }
 
-  return bestMask || new Uint8Array(mask.length);
+  components.sort((a, b) => b.area - a.area);
+  return components.slice(0, maxCount);
+}
+
+/** Backwards-compat helper: returns a mask containing only the largest component. */
+function largestComponent(mask, width, height) {
+  const comps = findComponents(mask, width, height, 0, 1);
+  return comps[0]?.mask || new Uint8Array(mask.length);
 }
 
 // ====================================================================
@@ -289,28 +295,47 @@ function buildSaliencyMask(data, width, height, sensitivity) {
   cleaned = dilate(cleaned, width, height);
   cleaned = erode(cleaned, width, height);
 
-  return largestComponent(cleaned, width, height);
+  // Return the cleaned mask with ALL components; callers decide whether to
+  // keep all of them as separate object layers or only the largest.
+  return cleaned;
 }
 
 async function runSubjectMode(selected) {
   const image = await loadImage(selected.src);
   const { data, width, height } = drawToCanvas(image);
-  const subjectMask = buildSaliencyMask(data, width, height, getSensitivity());
+  const cleanedMask = buildSaliencyMask(data, width, height, getSensitivity());
 
-  let subjectArea = 0;
-  for (let i = 0; i < subjectMask.length; i += 1) subjectArea += subjectMask[i];
-  if (subjectArea / subjectMask.length < 0.005) return [];
+  let totalArea = 0;
+  for (let i = 0; i < cleanedMask.length; i += 1) totalArea += cleanedMask[i];
+  if (totalArea / cleanedMask.length < 0.005) return [];
 
-  const backgroundMask = new Uint8Array(subjectMask.length);
-  for (let i = 0; i < subjectMask.length; i += 1) {
-    backgroundMask[i] = subjectMask[i] ? 0 : 1;
-  }
+  // Multi-object: every salient connected component becomes its own layer.
+  const components = findComponents(cleanedMask, width, height, 0.008, 8);
+  if (!components.length) return [];
 
   const layers = [];
-  const subjectLayer = maskToLayer(data, width, height, subjectMask);
-  if (subjectLayer) layers.push({ ...subjectLayer, kind: "subject" });
+  for (let i = 0; i < components.length; i += 1) {
+    const compLayer = maskToLayer(data, width, height, components[i].mask);
+    if (compLayer) {
+      layers.push({
+        ...compLayer,
+        kind: components.length === 1 ? "subject" : "object",
+        objectIndex: i + 1,
+        objectTotal: components.length
+      });
+    }
+  }
+
+  // Background = whatever wasn't claimed by any component.
+  const claimed = new Uint8Array(cleanedMask.length);
+  for (const c of components) {
+    for (let i = 0; i < c.mask.length; i += 1) if (c.mask[i]) claimed[i] = 1;
+  }
+  const backgroundMask = new Uint8Array(cleanedMask.length);
+  for (let i = 0; i < cleanedMask.length; i += 1) backgroundMask[i] = claimed[i] ? 0 : 1;
   const backgroundLayer = maskToLayer(data, width, height, backgroundMask);
   if (backgroundLayer) layers.push({ ...backgroundLayer, kind: "background" });
+
   return layers.map((layer) => ({ ...layer, sourceWidth: width, sourceHeight: height }));
 }
 
@@ -544,6 +569,10 @@ function captionFor(layer, base, index, total) {
   if (layer.kind === "text") return (layer.text || "文字").slice(0, 24);
   if (layer.kind === "graph") return "圖形";
   if (layer.kind === "subject") return `${base || "主體"}`;
+  if (layer.kind === "object") {
+    const n = layer.objectTotal || total;
+    return `${base || "物件"} ${layer.objectIndex || index + 1}/${n}`;
+  }
   if (layer.kind === "background") return `${base || "主體"} · 背景`;
   if (layer.kind === "palette") return `${layer.hex || `色彩 ${index + 1}`}`;
   return `${base || "圖層"} ${index + 1}/${total}`;
@@ -733,24 +762,37 @@ async function runAutoMode(selected) {
   // state.layerMode when they want image splitting.
   if (!textItems.length) return [];
 
-  const subjectMask = buildSaliencyMask(data, width, height, getSensitivity());
-  maskOutBboxes(subjectMask, width, height, textBboxes, 2);
+  const cleanedMask = buildSaliencyMask(data, width, height, getSensitivity());
+  maskOutBboxes(cleanedMask, width, height, textBboxes, 2);
 
-  let subjectArea = 0;
-  for (let i = 0; i < subjectMask.length; i += 1) subjectArea += subjectMask[i];
-  const subjectFraction = subjectArea / subjectMask.length;
+  let totalArea = 0;
+  for (let i = 0; i < cleanedMask.length; i += 1) totalArea += cleanedMask[i];
 
   const out = textItems.map((t) => ({ ...t, sourceWidth: width, sourceHeight: height }));
 
-  // Subject + background extraction is only meaningful when there's a clear
-  // subject region left over after removing the text. Otherwise (text-heavy
-  // posters, plain backgrounds) text items alone are the magic layer.
-  if (subjectFraction > 0.02) {
-    const subjectLayer = maskToLayer(data, width, height, subjectMask);
-    if (subjectLayer) out.push({ ...subjectLayer, kind: "subject", sourceWidth: width, sourceHeight: height });
-
-    const backgroundMask = new Uint8Array(subjectMask.length);
-    for (let i = 0; i < subjectMask.length; i += 1) backgroundMask[i] = subjectMask[i] ? 0 : 1;
+  // Beyond text, also separate every distinct salient object as its own
+  // layer (multi-component). Skipped when nothing meaningful is left.
+  if (totalArea / cleanedMask.length > 0.02) {
+    const components = findComponents(cleanedMask, width, height, 0.008, 8);
+    for (let i = 0; i < components.length; i += 1) {
+      const compLayer = maskToLayer(data, width, height, components[i].mask);
+      if (compLayer) {
+        out.push({
+          ...compLayer,
+          kind: components.length === 1 ? "subject" : "object",
+          objectIndex: i + 1,
+          objectTotal: components.length,
+          sourceWidth: width,
+          sourceHeight: height
+        });
+      }
+    }
+    const claimed = new Uint8Array(cleanedMask.length);
+    for (const c of components) {
+      for (let i = 0; i < c.mask.length; i += 1) if (c.mask[i]) claimed[i] = 1;
+    }
+    const backgroundMask = new Uint8Array(cleanedMask.length);
+    for (let i = 0; i < cleanedMask.length; i += 1) backgroundMask[i] = claimed[i] ? 0 : 1;
     maskOutBboxes(backgroundMask, width, height, textBboxes, 2);
     const backgroundLayer = maskToLayer(data, width, height, backgroundMask);
     if (backgroundLayer) out.push({ ...backgroundLayer, kind: "background", sourceWidth: width, sourceHeight: height });
