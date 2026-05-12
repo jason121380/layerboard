@@ -1,11 +1,14 @@
 /**
  * persist.js — cloud-sync board state via PUT/GET /api/board.
  *
- * Identity is the SHA-256 of the user's OpenAI key on the server side. With no
- * key (or no backend), loads return empty and saves no-op.
+ * Identity is the SHA-256 of the user's OpenAI key on the server side; the
+ * concrete canvas to read/write is determined by the active canvas id from
+ * canvases.js. With no key, no backend, or no active canvas, loads return
+ * empty and saves no-op.
  */
 
 import { state } from "./state.js";
+import { getActiveCanvasId } from "./canvases.js";
 
 let saveTimer = null;
 let saveInFlight = null;
@@ -16,7 +19,7 @@ function getKey() {
 }
 
 function canSync() {
-  return state.hasBackend !== false && !!getKey();
+  return state.hasBackend !== false && !!getKey() && !!getActiveCanvasId();
 }
 
 function serialise() {
@@ -50,10 +53,11 @@ async function saveNow() {
     queuedSave = true;
     return;
   }
+  const canvasId = getActiveCanvasId();
   const items = serialise();
   saveInFlight = (async () => {
     try {
-      const res = await fetch("/api/board", {
+      const res = await fetch(`/api/board?canvasId=${encodeURIComponent(canvasId)}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -80,10 +84,20 @@ export function scheduleAutoSave() {
   saveTimer = setTimeout(saveNow, 600);
 }
 
-export async function loadBoard() {
-  if (!canSync()) return [];
+/** Force any pending save to complete now. Used when switching canvases so the
+ *  outgoing canvas isn't left mid-write. */
+export async function flushBoard() {
+  clearTimeout(saveTimer);
+  if (saveInFlight) await saveInFlight;
+  await saveNow();
+}
+
+export async function loadBoard(canvasId = null) {
+  if (state.hasBackend === false || !getKey()) return [];
+  const id = canvasId || getActiveCanvasId();
+  if (!id) return [];
   try {
-    const res = await fetch("/api/board", {
+    const res = await fetch(`/api/board?canvasId=${encodeURIComponent(id)}`, {
       headers: { "X-OpenAI-Key": getKey() }
     });
     if (!res.ok) throw new Error(`status ${res.status}`);

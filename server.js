@@ -125,6 +125,39 @@ async function deleteUserJson(userId, name) {
   }
 }
 
+// ---------- Canvas helpers ----------
+function newCanvasId() {
+  return `c-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`;
+}
+
+function newCanvas(name) {
+  const now = Date.now();
+  return {
+    id: newCanvasId(),
+    name: String(name || "畫布 1").slice(0, 80),
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+// Read canvases index, performing one-time migration from legacy board.json.
+async function getCanvasesIndex(userId) {
+  const existing = await readUserJson(userId, "canvases", null);
+  if (existing && Array.isArray(existing.canvases) && existing.canvases.length) {
+    return existing;
+  }
+  // Migration path: legacy single-board user.
+  const legacyItems = await readUserJson(userId, "board", null);
+  const canvas = newCanvas("畫布 1");
+  const index = { canvases: [canvas], activeCanvasId: canvas.id };
+  if (Array.isArray(legacyItems) && legacyItems.length) {
+    await writeUserJson(userId, `canvas-${canvas.id}`, legacyItems);
+    await deleteUserJson(userId, "board");
+  }
+  await writeUserJson(userId, "canvases", index);
+  return index;
+}
+
 function requireUserId(req, res) {
   const userId = userIdFromKey(req.headers["x-openai-key"]);
   if (!userId) {
@@ -144,11 +177,23 @@ async function readSyncBody(req, res, maxBytes = MAX_BODY_BYTES) {
 }
 
 // ---------- Cloud sync route handlers ----------
+function getQueryParam(req, name) {
+  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+  return url.searchParams.get(name);
+}
+
+async function resolveCanvasId(userId, requested) {
+  const index = await getCanvasesIndex(userId);
+  if (requested && index.canvases.some((c) => c.id === requested)) return requested;
+  return index.activeCanvasId;
+}
+
 async function handleBoardGet(req, res) {
   const userId = requireUserId(req, res);
   if (!userId) return;
-  const items = await readUserJson(userId, "board", []);
-  sendJson(res, 200, { items: Array.isArray(items) ? items : [] });
+  const canvasId = await resolveCanvasId(userId, getQueryParam(req, "canvasId"));
+  const items = await readUserJson(userId, `canvas-${canvasId}`, []);
+  sendJson(res, 200, { items: Array.isArray(items) ? items : [], canvasId });
 }
 
 async function handleBoardPut(req, res) {
@@ -156,9 +201,92 @@ async function handleBoardPut(req, res) {
   if (!userId) return;
   const body = await readSyncBody(req, res, MAX_BOARD_BYTES);
   if (!body) return;
+  const canvasId = await resolveCanvasId(userId, getQueryParam(req, "canvasId"));
   const items = Array.isArray(body.items) ? body.items : [];
-  await writeUserJson(userId, "board", items);
-  sendJson(res, 200, { ok: true, count: items.length });
+  await writeUserJson(userId, `canvas-${canvasId}`, items);
+  // Touch updatedAt for the canvas.
+  const index = await getCanvasesIndex(userId);
+  const c = index.canvases.find((x) => x.id === canvasId);
+  if (c) {
+    c.updatedAt = Date.now();
+    await writeUserJson(userId, "canvases", index);
+  }
+  sendJson(res, 200, { ok: true, count: items.length, canvasId });
+}
+
+// ---------- Canvas CRUD ----------
+async function handleCanvasesGet(req, res) {
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+  const index = await getCanvasesIndex(userId);
+  sendJson(res, 200, index);
+}
+
+async function handleCanvasesPost(req, res) {
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+  const body = await readSyncBody(req, res);
+  if (!body) return;
+  const index = await getCanvasesIndex(userId);
+  const name = String(body.name || "").trim() || `畫布 ${index.canvases.length + 1}`;
+  const canvas = newCanvas(name);
+  index.canvases.push(canvas);
+  index.activeCanvasId = canvas.id;
+  await writeUserJson(userId, "canvases", index);
+  // Initialise empty board file so subsequent loads short-circuit cleanly.
+  await writeUserJson(userId, `canvas-${canvas.id}`, []);
+  sendJson(res, 200, { canvas, activeCanvasId: index.activeCanvasId });
+}
+
+async function handleCanvasPatch(req, res, canvasId) {
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+  const body = await readSyncBody(req, res);
+  if (!body) return;
+  const index = await getCanvasesIndex(userId);
+  const c = index.canvases.find((x) => x.id === canvasId);
+  if (!c) { sendJson(res, 404, { error: "Canvas not found." }); return; }
+  const name = String(body.name || "").trim();
+  if (!name) { sendJson(res, 400, { error: "Name is required." }); return; }
+  c.name = name.slice(0, 80);
+  c.updatedAt = Date.now();
+  await writeUserJson(userId, "canvases", index);
+  sendJson(res, 200, { canvas: c });
+}
+
+async function handleCanvasDelete(req, res, canvasId) {
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+  const index = await getCanvasesIndex(userId);
+  if (index.canvases.length <= 1) {
+    sendJson(res, 400, { error: "至少要保留一個畫布。" });
+    return;
+  }
+  const i = index.canvases.findIndex((x) => x.id === canvasId);
+  if (i === -1) { sendJson(res, 404, { error: "Canvas not found." }); return; }
+  index.canvases.splice(i, 1);
+  if (index.activeCanvasId === canvasId) {
+    index.activeCanvasId = index.canvases[Math.max(0, i - 1)].id;
+  }
+  await writeUserJson(userId, "canvases", index);
+  await deleteUserJson(userId, `canvas-${canvasId}`);
+  sendJson(res, 200, { ok: true, activeCanvasId: index.activeCanvasId });
+}
+
+async function handleCanvasesActivePut(req, res) {
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+  const body = await readSyncBody(req, res);
+  if (!body) return;
+  const index = await getCanvasesIndex(userId);
+  const id = String(body.id || "");
+  if (!index.canvases.some((c) => c.id === id)) {
+    sendJson(res, 404, { error: "Canvas not found." });
+    return;
+  }
+  index.activeCanvasId = id;
+  await writeUserJson(userId, "canvases", index);
+  sendJson(res, 200, { activeCanvasId: id });
 }
 
 async function handleLogGet(req, res) {
@@ -356,15 +484,32 @@ const ROUTES = [
   { method: "PUT", path: "/api/log", handler: handleLogPut },
   { method: "DELETE", path: "/api/log", handler: handleLogDelete },
   { method: "GET", path: "/api/usage", handler: handleUsageGet },
-  { method: "PUT", path: "/api/usage", handler: handleUsagePut }
+  { method: "PUT", path: "/api/usage", handler: handleUsagePut },
+  { method: "GET", path: "/api/canvases", handler: handleCanvasesGet },
+  { method: "POST", path: "/api/canvases", handler: handleCanvasesPost },
+  { method: "PUT", path: "/api/canvases/active", handler: handleCanvasesActivePut }
 ];
+
+// Pathname comparison strips query string so /api/board?canvasId=… matches.
+function getPathname(req) {
+  return (req.url || "/").split("?")[0];
+}
 
 const server = http.createServer(async (req, res) => {
   try {
-    const route = ROUTES.find((r) => r.method === req.method && r.path === req.url);
+    const pathname = getPathname(req);
+    const route = ROUTES.find((r) => r.method === req.method && r.path === pathname);
     if (route) {
       await route.handler(req, res);
       return;
+    }
+
+    // Parameterized: /api/canvases/<id>  (PATCH | DELETE)
+    const canvasMatch = pathname.match(/^\/api\/canvases\/([A-Za-z0-9_-]{3,40})$/);
+    if (canvasMatch) {
+      const id = canvasMatch[1];
+      if (req.method === "PATCH") { await handleCanvasPatch(req, res, id); return; }
+      if (req.method === "DELETE") { await handleCanvasDelete(req, res, id); return; }
     }
 
     if (req.method === "GET") {

@@ -44,7 +44,7 @@ npm run dev
 |---|---|---|
 | `OPENAI_API_KEY` | _(選填)_ | OpenAI 金鑰；未設定時前端可由右上角 chip 自行輸入並存到 localStorage（透過 `X-OpenAI-Key` 標頭傳給伺服器）|
 | `OPENAI_IMAGE_MODEL` | `gpt-image-2` | 影像模型名稱（2026/04 起官方推薦）；要降級到 `gpt-image-1` / `gpt-image-1-mini` / `gpt-image-1.5` 改這個變數即可 |
-| `DATA_DIR` | `./data` | 雲端同步資料寫入位置；Zeabur 上應指向已掛載的 Persistent Volume（預設掛在 `/app/data`）|
+| `DATA_DIR` | `./data` | 雲端同步資料寫入位置；Zeabur 上應指向已掛載的 Persistent Volume（預設掛在 `/src/data`）|
 | `PORT` | `3000` | 伺服器埠號（Zeabur 等平台會自動注入）|
 | `HOST` | `0.0.0.0` | 監聽位址；容器/PaaS 部署需保持 `0.0.0.0` |
 
@@ -58,7 +58,7 @@ npm run dev
    - `OPENAI_IMAGE_MODEL`（選填）
 3. 開啟 HTTP Domain，Zeabur 會把外部流量導到容器的 `PORT`（自動注入）
 4. Healthcheck 使用 `/api/health`（已在 `zeabur.json` 內設定）
-5. Persistent Volume 已宣告於 `zeabur.json`（`/app/data`），Zeabur 會自動配置；雲端同步資料寫在此處，**重新部署不會遺失**
+5. Persistent Volume 已宣告於 `zeabur.json`（`/src/data`），Zeabur 會自動配置；雲端同步資料寫在此處，**重新部署不會遺失**
 
 部署相關優化（已實裝）：
 

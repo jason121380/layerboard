@@ -12,7 +12,7 @@
     { "id": "web", "port": 3000, "type": "HTTP" }
   ],
   "volumes": [
-    { "id": "data", "dir": "/app/data" }
+    { "id": "data", "dir": "/src/data" }
   ],
   "healthcheck": {
     "type": "http",
