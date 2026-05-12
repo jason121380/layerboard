@@ -502,6 +502,73 @@ export function duplicateSelected() {
   selectItems(copies.map((c) => c.id));
 }
 
+// ---------- Cross-canvas clipboard ----------
+const CLIPBOARD_KEY = "layerboard_clipboard";
+
+function serializeForClipboard(item) {
+  return {
+    type: item.type,
+    src: item.src,
+    text: item.text,
+    fit: item.fit,
+    visible: item.visible,
+    opacity: item.opacity,
+    layerGroup: item.layerGroup,
+    x: item.x,
+    y: item.y,
+    width: item.width,
+    height: item.height,
+    caption: item.caption,
+    fontSize: item.fontSize ?? null,
+    color: item.color ?? null,
+    fontFamily: item.fontFamily ?? null,
+    fontWeight: item.fontWeight ?? null,
+    prompt: item.prompt ?? null,
+    source: item.source ?? null
+  };
+}
+
+export function copySelectedToClipboard() {
+  const selected = getSelectedItems();
+  if (!selected.length) return 0;
+  const payload = selected.map(serializeForClipboard);
+  try {
+    localStorage.setItem(CLIPBOARD_KEY, JSON.stringify(payload));
+  } catch (err) {
+    // Quota exceeded (large base64 images). Fall back to in-memory clipboard.
+    inMemoryClipboard = payload;
+    console.warn("[clipboard] localStorage quota exceeded, using in-memory fallback");
+  }
+  showToast(`已複製 ${selected.length} 個項目`);
+  return selected.length;
+}
+
+let inMemoryClipboard = null;
+
+export function pasteFromClipboard() {
+  let data = null;
+  try {
+    const raw = localStorage.getItem(CLIPBOARD_KEY);
+    if (raw) data = JSON.parse(raw);
+  } catch {}
+  if (!Array.isArray(data) || !data.length) data = inMemoryClipboard;
+  if (!Array.isArray(data) || !data.length) return 0;
+
+  clearSelection();
+  const created = data.map((d) =>
+    createItem({
+      ...d,
+      x: (d.x || 0) + 28,
+      y: (d.y || 0) + 28,
+      select: false
+    })
+  );
+  selectItems(created.map((c) => c.id));
+  scheduleAutoSave();
+  showToast(`已貼上 ${created.length} 個項目`);
+  return created.length;
+}
+
 export function revertLayer() {
   const primary = getSelectedItem();
   if (!primary?.sourceId) return;
