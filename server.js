@@ -307,21 +307,41 @@ async function handleReplicateStart(req, res) {
   if (!token) return;
   const body = await readSyncBody(req, res, MAX_BOARD_BYTES);
   if (!body) return;
-  const model = String(body.model || "").trim();
-  if (!model || !/^[a-z0-9_-]+\/[a-z0-9._-]+$/i.test(model)) {
-    sendJson(res, 400, { error: "Invalid model identifier." });
+  const raw = String(body.model || "").trim();
+  // Accept either "owner/name" (uses the model's default version) or
+  // "owner/name:<hash>" (forces a specific version via /v1/predictions).
+  const versionMatch = raw.match(/^([a-z0-9_-]+\/[a-z0-9._-]+):([a-f0-9]{40,64})$/i);
+  const modelMatch = raw.match(/^[a-z0-9_-]+\/[a-z0-9._-]+$/i);
+  if (!versionMatch && !modelMatch) {
+    sendJson(res, 400, { error: "Invalid model identifier. Use owner/name or owner/name:<version_hash>." });
     return;
   }
   try {
-    const upstream = await fetch(`https://api.replicate.com/v1/models/${model}/predictions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        Prefer: "wait=60"
-      },
-      body: JSON.stringify({ input: body.input || {} })
-    });
+    let upstream;
+    if (versionMatch) {
+      upstream = await fetch("https://api.replicate.com/v1/predictions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Prefer: "wait=60"
+        },
+        body: JSON.stringify({
+          version: versionMatch[2],
+          input: body.input || {}
+        })
+      });
+    } else {
+      upstream = await fetch(`https://api.replicate.com/v1/models/${raw}/predictions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Prefer: "wait=60"
+        },
+        body: JSON.stringify({ input: body.input || {} })
+      });
+    }
     const payload = await upstream.json().catch(() => ({}));
     sendJson(res, upstream.status, payload);
   } catch (err) {

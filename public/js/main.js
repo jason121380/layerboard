@@ -23,7 +23,7 @@ import { magicLayerSelected, renderLayerPanel } from "./magic-layer.js";
 import { generateImages, exportSelectedItems, saveApiKey } from "./api.js";
 import { pushHistory, undo, redo } from "./history.js";
 import { loadBoard, scheduleAutoSave, flushBoard } from "./persist.js";
-import { renderUsage, initUsage, resetUsageCache } from "./usage.js";
+import { renderUsage, initUsage, resetUsageCache, getUsage, formatTwd } from "./usage.js";
 import { readLog, clearLog, initLog, resetLogCache } from "./generation-log.js";
 import {
   initCanvases, initCanvasUi, render as renderCanvases,
@@ -120,119 +120,67 @@ async function handleCanvasSwitch({ outgoingFlush = false, incomingId = null } =
   }
 }
 
-// ---------- API Key modal ----------
-function initApiKeyModal() {
+// ---------- Settings modal (top-right gear + status-chip click) ----------
+function initSettingsModal() {
   const chip = document.querySelector(".status-chip");
-  const modal = document.querySelector("#apiKeyModal");
-  const openaiInput = document.querySelector("#apiKeyInput");
-  const replicateInput = document.querySelector("#replicateKeyInput");
-  const save = document.querySelector("#apiKeySave");
-  const cancel = document.querySelector("#apiKeyCancel");
-  if (!chip || !modal) return;
+  const gearBtn = document.querySelector("#settingsBtn");
+  const modal = document.querySelector("#settingsModal");
+  const closeBtn = document.querySelector("#settingsClose");
+  const cancelBtn = document.querySelector("#settingsCancel");
+  const saveBtn = document.querySelector("#settingsSave");
+  const openaiInput = document.querySelector("#settingsOpenaiKey");
+  const replicateInput = document.querySelector("#settingsReplicateKey");
+  const replicateModelInput = document.querySelector("#settingsReplicateModel");
+  const gridToggle = document.querySelector("#settingsGridToggle");
+  const tabs = modal?.querySelectorAll(".settings-tab");
+  const panels = modal?.querySelectorAll(".settings-panel");
+  if (!modal) return;
+
+  // Grid line element — default to hidden, mirror state into the checkbox.
+  const gridEl = document.querySelector(".grid-lines");
+  gridEl?.classList.add("hidden");
 
   function updateChipState() {
-    const has = !!localStorage.getItem("openai_api_key");
-    chip.classList.toggle("has-key", has);
+    chip?.classList.toggle("has-key", !!localStorage.getItem("openai_api_key"));
   }
-
-  chip.style.cursor = "pointer";
-  chip.addEventListener("click", () => {
-    if (openaiInput) openaiInput.value = localStorage.getItem("openai_api_key") || "";
-    if (replicateInput) replicateInput.value = localStorage.getItem("replicate_api_token") || "";
-    modal.hidden = false;
-    openaiInput?.focus();
-  });
-
-  save.addEventListener("click", async () => {
-    const before = (localStorage.getItem("openai_api_key") || "").trim();
-    saveApiKey(openaiInput?.value || "");
-    const rkey = (replicateInput?.value || "").trim();
-    if (rkey) localStorage.setItem("replicate_api_token", rkey);
-    else localStorage.removeItem("replicate_api_token");
-    modal.hidden = true;
-    updateChipState();
-    const after = (localStorage.getItem("openai_api_key") || "").trim();
-    if (after !== before) {
-      await reloadCloudData();
-      showToast(after ? "已切換帳號，雲端資料載入完成。" : "已登出 — 畫布清空。");
-    } else {
-      showToast(rkey ? "Keys 已儲存。" : "OpenAI Key 已儲存。");
-    }
-  });
-
-  cancel.addEventListener("click", () => { modal.hidden = true; });
-
-  modal.addEventListener("click", (e) => { if (e.target === modal) modal.hidden = true; });
-
-  [openaiInput, replicateInput].forEach((input) => {
-    input?.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") save.click();
-      if (e.key === "Escape") cancel.click();
-    });
-  });
-
-  updateChipState();
-}
-
-// ---------- Generation log modal ----------
-function initHistoryModal() {
-  const btn = document.querySelector("#historyBtn");
-  const modal = document.querySelector("#historyModal");
-  const list = document.querySelector("#historyList");
-  const closeBtn = document.querySelector("#historyClose");
-  const clearBtn = document.querySelector("#historyClear");
-  const copyBtn = document.querySelector("#historyCopy");
-  const filters = modal?.querySelectorAll(".history-filter");
-  if (!btn || !modal || !list) return;
-
-  let activeFilter = "all";
 
   function fmtTime(ts) {
-    const d = new Date(ts);
-    return d.toLocaleString("zh-TW", { hour12: false });
+    return new Date(ts).toLocaleString("zh-TW", { hour12: false });
   }
-
   function fmtDuration(ms) {
     if (ms == null) return "—";
     return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} 秒`;
   }
-
   function statusGlyph(s) {
     if (s === "success") return "✓";
     if (s === "failed") return "✕";
     return "…";
   }
+  function escape(s) { return String(s).replace(/</g, "&lt;"); }
 
-  function render() {
-    const entries = readLog().filter((e) =>
-      activeFilter === "all" ? true : e.status === activeFilter
-    );
+  function renderLogList(container, entries, emptyMsg) {
     if (!entries.length) {
-      list.innerHTML = '<div class="history-empty">尚無紀錄。試試在下方輸入 prompt 並按生成。</div>';
+      container.innerHTML = `<div class="settings-log-empty">${emptyMsg}</div>`;
       return;
     }
-    list.innerHTML = entries.map((e) => {
-      const modeLabel =
-        e.mode === "magic-layer" ? "魔法圖層" :
-        e.mode === "edit" ? "編輯" : "生成";
+    container.innerHTML = entries.map((e) => {
       const isMagic = e.mode === "magic-layer";
+      const modeLabel = isMagic ? "魔法圖層" : e.mode === "edit" ? "編輯" : "生成";
       const tags = [
         `<span class="log-tag">${modeLabel}</span>`,
-        // Magic-layer rows hide aspect ratio (not meaningful) and surface the
-        // sub-mode (auto / sam / subject / palette / text) instead.
         isMagic
           ? `<span class="log-tag">${e.layerMode || "auto"}</span>`
           : `<span class="log-tag">${e.aspectRatio || "square"}</span>`,
         `<span class="log-tag">${e.model || "?"}</span>`,
-        `<span class="log-tag">${e.backend || "?"}</span>`,
         e.referenceCount ? `<span class="log-tag">${e.referenceCount} 參考圖</span>` : "",
         isMagic && e.imageCount ? `<span class="log-tag">${e.imageCount} 輸入</span>` : "",
         !isMagic && e.imageCount ? `<span class="log-tag tag-success">${e.imageCount} 張</span>` : "",
         isMagic && e.textCount ? `<span class="log-tag tag-success">${e.textCount} 段文字</span>` : "",
-        isMagic && e.layerCount ? `<span class="log-tag tag-success">${e.layerCount} 圖層</span>` : ""
+        isMagic && e.layerCount ? `<span class="log-tag tag-success">${e.layerCount} 圖層</span>` : "",
+        `<span class="log-tag">${fmtDuration(e.durationMs)}</span>`
       ].filter(Boolean).join("");
       const errorBlock = e.status === "failed" && e.error
-        ? `<div class="log-error">${e.error.replace(/</g, "&lt;")}</div>`
+        ? `<div class="log-error">${escape(e.error)}</div>`
         : "";
       return `
         <div class="log-entry">
@@ -241,9 +189,8 @@ function initHistoryModal() {
             <div class="log-row">
               <span class="log-time">${fmtTime(e.time)}</span>
               ${tags}
-              <span class="log-tag">${fmtDuration(e.durationMs)}</span>
             </div>
-            <div class="log-prompt">${(e.prompt || "").replace(/</g, "&lt;")}</div>
+            ${e.prompt ? `<div class="log-prompt">${escape(e.prompt)}</div>` : ""}
             ${errorBlock}
           </div>
         </div>
@@ -251,54 +198,98 @@ function initHistoryModal() {
     }).join("");
   }
 
-  btn.addEventListener("click", () => {
-    render();
-    modal.hidden = false;
-  });
-  closeBtn?.addEventListener("click", () => { modal.hidden = true; });
-  modal.addEventListener("click", (e) => { if (e.target === modal) modal.hidden = true; });
+  function renderAll() {
+    const u = getUsage();
+    document.querySelector("#gptStatCount").textContent = `${u.count || 0} 張`;
+    document.querySelector("#gptStatCost").textContent = formatTwd(u.usd || 0);
+    document.querySelector("#magicStatCount").textContent = `${u.magicCount || 0} 次`;
+    document.querySelector("#magicStatCost").textContent = formatTwd(u.magicUsd || 0);
+    const all = readLog();
+    renderLogList(
+      document.querySelector("#settingsGptLog"),
+      all.filter((e) => e.mode !== "magic-layer"),
+      "尚無生成紀錄。"
+    );
+    renderLogList(
+      document.querySelector("#settingsMagicLog"),
+      all.filter((e) => e.mode === "magic-layer"),
+      "尚無 Magic Layer 紀錄。"
+    );
+  }
 
-  filters?.forEach((f) => {
-    f.addEventListener("click", () => {
-      activeFilter = f.dataset.filter;
-      filters.forEach((b) => b.classList.toggle("active", b === f));
-      render();
+  function openModal() {
+    if (openaiInput) openaiInput.value = localStorage.getItem("openai_api_key") || "";
+    if (replicateInput) replicateInput.value = localStorage.getItem("replicate_api_token") || "";
+    if (replicateModelInput) replicateModelInput.value = localStorage.getItem("replicate_model") || "";
+    if (gridToggle && gridEl) gridToggle.checked = !gridEl.classList.contains("hidden");
+    renderAll();
+    modal.hidden = false;
+    openaiInput?.focus();
+  }
+  function closeModal() { modal.hidden = true; }
+
+  if (chip) {
+    chip.style.cursor = "pointer";
+    chip.addEventListener("click", openModal);
+  }
+  gearBtn?.addEventListener("click", openModal);
+  closeBtn?.addEventListener("click", closeModal);
+  cancelBtn?.addEventListener("click", closeModal);
+  modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
+
+  // Tab switching
+  tabs?.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      tabs.forEach((t) => t.classList.toggle("active", t === tab));
+      panels?.forEach((p) => { p.hidden = p.dataset.panel !== tab.dataset.tab; });
     });
   });
 
-  clearBtn?.addEventListener("click", async () => {
-    if (!confirm("確定清空所有生成紀錄？")) return;
-    await clearLog();
-    render();
+  // Grid toggle
+  gridToggle?.addEventListener("change", () => {
+    gridEl?.classList.toggle("hidden", !gridToggle.checked);
   });
 
-  copyBtn?.addEventListener("click", async () => {
-    const json = JSON.stringify(readLog(), null, 2);
-    try {
-      await navigator.clipboard.writeText(json);
-      showToast("紀錄已複製為 JSON。");
-    } catch {
-      showToast("複製失敗，請手動從 console 取得。");
-      console.log(json);
+  // Save: writes API key, Replicate token + model. Triggers cloud reload
+  // when the OpenAI key actually changed.
+  saveBtn?.addEventListener("click", async () => {
+    const before = (localStorage.getItem("openai_api_key") || "").trim();
+    saveApiKey(openaiInput?.value || "");
+    const rkey = (replicateInput?.value || "").trim();
+    if (rkey) localStorage.setItem("replicate_api_token", rkey);
+    else localStorage.removeItem("replicate_api_token");
+    const rmodel = (replicateModelInput?.value || "").trim();
+    if (rmodel) localStorage.setItem("replicate_model", rmodel);
+    else localStorage.removeItem("replicate_model");
+    closeModal();
+    updateChipState();
+    const after = (localStorage.getItem("openai_api_key") || "").trim();
+    if (after !== before) {
+      await reloadCloudData();
+      showToast(after ? "已切換帳號，雲端資料載入完成。" : "已登出 — 畫布清空。");
+    } else {
+      showToast("設定已儲存。");
     }
   });
-}
 
-// ---------- Grid toggle ----------
-function initGridToggle() {
-  const btn = document.querySelector("#gridToggleBtn");
-  const gridEl = document.querySelector(".grid-lines");
-  if (!btn || !gridEl) return;
-
-  // 預設關閉格線
-  gridEl.classList.add("hidden");
-  btn.setAttribute("aria-pressed", "false");
-
-  btn.addEventListener("click", () => {
-    const isVisible = btn.getAttribute("aria-pressed") === "true";
-    gridEl.classList.toggle("hidden", isVisible);
-    btn.setAttribute("aria-pressed", String(!isVisible));
+  // Per-section "clear log" buttons (delete-everything for now; filter is
+  // by mode but the backing store is a single list).
+  modal.querySelectorAll(".settings-log-clear").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("確定清空所有生成紀錄？（兩個頁籤共用同一份紀錄）")) return;
+      await clearLog();
+      renderAll();
+    });
   });
+
+  [openaiInput, replicateInput, replicateModelInput].forEach((input) => {
+    input?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") saveBtn?.click();
+      if (e.key === "Escape") closeModal();
+    });
+  });
+
+  updateChipState();
 }
 
 // ---------- Wire events ----------
@@ -566,9 +557,7 @@ async function loadHealth() {
 
 async function init() {
   bindEvents();
-  initApiKeyModal();
-  initHistoryModal();
-  initGridToggle();
+  initSettingsModal();
   setMixerHeight(state.mixerHeight);
   fitBoard(true);
   setBoardZoom(0.2); // default initial zoom (overrides fitBoard's auto-fit)

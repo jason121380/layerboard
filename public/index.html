@@ -19,33 +19,85 @@
           <span id="modelLabel">gpt-image-2</span>
           <span id="usageLabel" class="usage-label" hidden></span>
         </div>
-        <button id="historyBtn" class="topbar-icon-btn" type="button" title="生成紀錄" aria-label="生成紀錄">
+        <button id="settingsBtn" class="topbar-icon-btn" type="button" title="設定" aria-label="設定">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="10"/>
-          </svg>
-        </button>
-        <button id="gridToggleBtn" class="topbar-icon-btn" type="button" title="顯示/隱藏格線" aria-label="Toggle grid" aria-pressed="true">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
         </button>
       </header>
 
-      <!-- ===== API Keys Modal ===== -->
-      <div id="apiKeyModal" class="api-modal" role="dialog" aria-modal="true" aria-label="Set API keys" hidden>
-        <div class="api-modal-card">
-          <p class="api-modal-title">API 金鑰</p>
-          <label class="api-modal-field">
-            <span class="api-modal-field-label">OpenAI API Key <small>（圖片生成 / 編輯）</small></span>
-            <input id="apiKeyInput" class="api-modal-input" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false" />
-          </label>
-          <label class="api-modal-field">
-            <span class="api-modal-field-label">Replicate API Token <small>（Magic Layer SAM 2，選填）</small></span>
-            <input id="replicateKeyInput" class="api-modal-input" type="password" placeholder="r8_..." autocomplete="off" spellcheck="false" />
-          </label>
+      <!-- ===== Settings Modal (API keys + usage + log per service) ===== -->
+      <div id="settingsModal" class="api-modal" role="dialog" aria-modal="true" aria-label="設定" hidden>
+        <div class="api-modal-card settings-card">
+          <header class="settings-header">
+            <p class="api-modal-title">設定</p>
+            <button id="settingsClose" class="settings-close" type="button" aria-label="關閉">✕</button>
+          </header>
+          <div class="settings-tabs" role="tablist">
+            <button class="settings-tab active" type="button" data-tab="gpt" role="tab">GPT Image 2</button>
+            <button class="settings-tab" type="button" data-tab="magic" role="tab">Magic Layer</button>
+            <button class="settings-tab" type="button" data-tab="misc" role="tab">其他</button>
+          </div>
+
+          <section class="settings-panel" data-panel="gpt">
+            <label class="api-modal-field">
+              <span class="api-modal-field-label">OpenAI API Key <small>（圖片生成 / 編輯）</small></span>
+              <input id="settingsOpenaiKey" class="api-modal-input" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false" />
+            </label>
+            <div class="settings-stats">
+              <div class="stat-card">
+                <div class="stat-label">已生成</div>
+                <div class="stat-value" id="gptStatCount">0 張</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">累計花費</div>
+                <div class="stat-value" id="gptStatCost">NT$ 0</div>
+              </div>
+            </div>
+            <div class="settings-log-head">
+              <span class="settings-log-title">生成紀錄</span>
+              <button class="settings-log-clear" data-log="gpt" type="button">清空</button>
+            </div>
+            <div id="settingsGptLog" class="settings-log"></div>
+          </section>
+
+          <section class="settings-panel" data-panel="magic" hidden>
+            <label class="api-modal-field">
+              <span class="api-modal-field-label">Replicate API Token <small>（Magic Layer SAM 2，選填）</small></span>
+              <input id="settingsReplicateKey" class="api-modal-input" type="password" placeholder="r8_..." autocomplete="off" spellcheck="false" />
+            </label>
+            <label class="api-modal-field">
+              <span class="api-modal-field-label">Replicate Model <small>（選填，預設 lucataco/segment-anything-2）</small></span>
+              <input id="settingsReplicateModel" class="api-modal-input" type="text" placeholder="owner/name" autocomplete="off" spellcheck="false" />
+            </label>
+            <div class="settings-stats">
+              <div class="stat-card">
+                <div class="stat-label">執行次數</div>
+                <div class="stat-value" id="magicStatCount">0 次</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">累計花費</div>
+                <div class="stat-value" id="magicStatCost">NT$ 0</div>
+              </div>
+            </div>
+            <div class="settings-log-head">
+              <span class="settings-log-title">Magic Layer 紀錄</span>
+              <button class="settings-log-clear" data-log="magic" type="button">清空</button>
+            </div>
+            <div id="settingsMagicLog" class="settings-log"></div>
+          </section>
+
+          <section class="settings-panel" data-panel="misc" hidden>
+            <label class="settings-toggle-row">
+              <span>顯示格線</span>
+              <input id="settingsGridToggle" type="checkbox" />
+            </label>
+          </section>
+
           <div class="api-modal-actions">
-            <button id="apiKeySave" class="api-modal-save" type="button">儲存</button>
-            <button id="apiKeyCancel" class="api-modal-cancel" type="button">取消</button>
+            <button id="settingsCancel" class="api-modal-cancel" type="button">取消</button>
+            <button id="settingsSave" class="api-modal-save" type="button">儲存</button>
           </div>
         </div>
       </div>
@@ -136,26 +188,6 @@
         <!-- always -->
         <button id="deleteBtn" type="button" disabled>刪除</button>
       </section>
-
-      <!-- ===== Generation Log Modal ===== -->
-      <div id="historyModal" class="api-modal" role="dialog" aria-modal="true" aria-label="生成紀錄" hidden>
-        <div class="api-modal-card history-card">
-          <div class="history-header">
-            <p class="api-modal-title" style="margin:0">生成紀錄</p>
-            <div class="history-filters" role="tablist">
-              <button class="history-filter active" type="button" data-filter="all">全部</button>
-              <button class="history-filter" type="button" data-filter="success">成功</button>
-              <button class="history-filter" type="button" data-filter="failed">失敗</button>
-            </div>
-          </div>
-          <div id="historyList" class="history-list"></div>
-          <div class="api-modal-actions">
-            <button id="historyClear" class="api-modal-cancel" type="button">清空紀錄</button>
-            <button id="historyCopy" class="api-modal-cancel" type="button">複製為 JSON</button>
-            <button id="historyClose" class="api-modal-save" type="button">關閉</button>
-          </div>
-        </div>
-      </div>
 
       <!-- ===== Prompt View Modal ===== -->
       <div id="promptViewModal" class="api-modal" role="dialog" aria-modal="true" aria-label="View prompt" hidden>

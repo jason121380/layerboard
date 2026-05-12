@@ -34,6 +34,7 @@ import {
   updateControls
 } from "./items.js";
 import { logStart, logEnd } from "./generation-log.js";
+import { recordMagic } from "./usage.js";
 
 const MAX_PROCESS_SIDE = 720;
 const KMEANS_SAMPLE_SIZE = 8000;
@@ -1079,6 +1080,8 @@ export async function magicLayerSelected() {
       ? `拆出 ${textCount} 段可編輯文字${layerCount ? ` + ${layerCount} 個圖層` : ""}。`
       : `從 ${targets.length} 張圖拆出 ${createdLayers.length} 個圖層。`;
     progress.end(summary);
+    // Bill once per input image when SAM ran on the cloud; local-saliency is free.
+    if (usingSam) recordMagic(targets.length);
     logEnd(logId, {
       status: "success",
       durationMs: Date.now() - start,
