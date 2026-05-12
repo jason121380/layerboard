@@ -44,14 +44,13 @@ const TESSERACT_CDN = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tess
 const OCR_LANGS = ["eng", "chi_tra"];
 const OCR_MIN_CONFIDENCE = 55;
 
-// Replicate SAM 2 — multi-object instance segmentation. Model can be
-// overridden via localStorage.replicate_model. The default pins a specific
-// version because the model-level predictions endpoint (without a hash) is
-// returning 404 for this owner/name as of 2026-05.
+// Replicate Qwen-Image-Layered — semantic layer decomposition. Input is the
+// source image, output is an array of transparent PNGs ready to drop on the
+// canvas, no SAM-style mask compositing required. Override via
+// localStorage.replicate_model.
 const REPLICATE_API = "https://api.replicate.com/v1";
-const DEFAULT_SAM_MODEL =
-  "lucataco/segment-anything-2:be7cbde9fdf0eecdc8b20ffec9dd0d1cfeace0832d4d0b58a071d993182e1be0";
-const DEFAULT_SAM_MASK_LIMIT = 12;
+const DEFAULT_REPLICATE_MODEL = "qwen/qwen-image-layered";
+const DEFAULT_NUM_LAYERS = 4;
 
 // ====================================================================
 // Shared helpers
@@ -891,13 +890,19 @@ async function composeMaskedLayer(srcImage, maskUrl, index) {
 }
 
 async function runSamMode(selected, onProgress) {
+  // Misnomer kept to avoid churn elsewhere — now actually drives Qwen Image
+  // Layered (see DEFAULT_REPLICATE_MODEL). Qwen returns transparent PNGs of
+  // each semantic layer, so we skip SAM's compose-mask step.
   const token = getReplicateToken();
   if (!token) throw new Error("尚未設定 Replicate Token");
-  const model = localStorage.getItem("replicate_model") || DEFAULT_SAM_MODEL;
+  const rawModel = localStorage.getItem("replicate_model") || DEFAULT_REPLICATE_MODEL;
+  // One-time migration: previous default was lucataco/segment-anything-2,
+  // whose input schema is incompatible. Treat any stored SAM identifier as a
+  // legacy artefact and silently upgrade to Qwen so old users don't 422.
+  const model = /segment-anything/i.test(rawModel) ? DEFAULT_REPLICATE_MODEL : rawModel;
+  const numLayers = Number(localStorage.getItem("qwen_num_layers")) || DEFAULT_NUM_LAYERS;
 
-  onProgress?.("SAM 啟動中…");
-  // Calls go through our backend proxy (server.js) because api.replicate.com
-  // doesn't return CORS headers for browser requests.
+  onProgress?.("Qwen Layered 啟動中…");
   const startResp = await fetch("/api/replicate/start", {
     method: "POST",
     headers: {
@@ -908,7 +913,11 @@ async function runSamMode(selected, onProgress) {
       model,
       input: {
         image: selected.src,
-        mask_limit: DEFAULT_SAM_MASK_LIMIT
+        go_fast: true,
+        num_layers: numLayers,
+        description: "auto",
+        output_format: "webp",
+        output_quality: 95
       }
     })
   });
@@ -917,10 +926,8 @@ async function runSamMode(selected, onProgress) {
     throw new Error(payload?.detail || payload?.title || payload?.error || `Replicate ${startResp.status}`);
   }
 
-  // Poll until terminal status. /api/replicate/status/<id> proxies to
-  // api.replicate.com/v1/predictions/<id>.
   while (payload.status && payload.status !== "succeeded" && payload.status !== "failed" && payload.status !== "canceled") {
-    onProgress?.(`SAM ${payload.status}…`);
+    onProgress?.(`Qwen ${payload.status}…`);
     await new Promise((r) => setTimeout(r, 1800));
     if (!payload.id) break;
     const r = await fetch(`/api/replicate/status/${encodeURIComponent(payload.id)}`, {
@@ -929,34 +936,43 @@ async function runSamMode(selected, onProgress) {
     payload = await r.json().catch(() => ({}));
   }
   if (payload.status !== "succeeded") {
-    throw new Error(payload.error || payload.detail || `SAM ${payload.status || "unknown"}`);
+    throw new Error(payload.error || payload.detail || `Qwen ${payload.status || "unknown"}`);
   }
 
-  const maskUrls = normaliseSamOutput(payload.output);
-  if (!maskUrls.length) throw new Error("SAM 沒回傳任何 mask");
+  const layerUrls = normaliseSamOutput(payload.output);
+  if (!layerUrls.length) throw new Error("Qwen 沒回傳任何圖層");
 
-  onProgress?.(`合成 ${maskUrls.length} 個圖層…`);
+  // No compose step — Qwen outputs are already transparent PNGs sized to the
+  // source. Just need source dimensions for the placement maths in
+  // splitItemIntoLayers.
   const sourceImage = await loadImage(selected.src);
-  const layers = [];
-  for (let i = 0; i < maskUrls.length; i += 1) {
-    const layer = await composeMaskedLayer(sourceImage, maskUrls[i], i);
-    if (layer) layers.push(layer);
-  }
-  layers.sort((a, b) => b.area - a.area);
-  return layers.slice(0, 12); // cap to avoid clutter
+  const sw = sourceImage.naturalWidth;
+  const sh = sourceImage.naturalHeight;
+  return layerUrls.slice(0, 12).map((url, i) => ({
+    src: url,
+    x: 0,
+    y: 0,
+    width: sw,
+    height: sh,
+    sourceWidth: sw,
+    sourceHeight: sh,
+    area: sw * sh,
+    kind: "object",
+    objectIndex: i + 1
+  }));
 }
 
 async function runForMode(selected, mode) {
   if (mode === "sam") return runSamMode(selected, (msg) => ocrProgressHook?.(msg));
   if (mode === "auto") {
-    // Auto picks SAM when a Replicate token is set, otherwise uses the local
-    // OCR + saliency pipeline.
+    // Auto picks the Replicate path (Qwen Image Layered) when a token is set,
+    // otherwise falls back to the local OCR + saliency pipeline.
     if (getReplicateToken()) {
       try {
         return await runSamMode(selected, (msg) => ocrProgressHook?.(msg));
       } catch (err) {
-        console.warn("[magic-layer] SAM failed, falling back:", err.message);
-        ocrProgressHook?.(`SAM 失敗，改用本地演算法（${err.message}）`);
+        console.warn("[magic-layer] Replicate failed, falling back:", err.message);
+        ocrProgressHook?.(`Qwen 失敗，改用本地演算法（${err.message}）`);
       }
     }
     return runAutoMode(selected);
@@ -1038,15 +1054,15 @@ export async function magicLayerSelected() {
   );
   setOcrProgressHook((label) => progress.update(label));
 
-  const usingSam = getReplicateToken() && (mode === "auto" || mode === "sam");
+  const usingReplicate = getReplicateToken() && (mode === "auto" || mode === "sam");
   const start = Date.now();
   const logId = logStart({
     mode: "magic-layer",
     layerMode: mode,
     prompt: `Magic Layer × ${targets.length}`,
     imageCount: targets.length,
-    model: usingSam
-      ? `replicate:${localStorage.getItem("replicate_model") || DEFAULT_SAM_MODEL}`
+    model: usingReplicate
+      ? `replicate:${localStorage.getItem("replicate_model") || DEFAULT_REPLICATE_MODEL}`
       : "local-saliency",
     backend: state.hasBackend === true ? "server" : "direct"
   });
@@ -1086,7 +1102,7 @@ export async function magicLayerSelected() {
       : `從 ${targets.length} 張圖拆出 ${createdLayers.length} 個圖層。`;
     progress.end(summary);
     // Bill once per input image when SAM ran on the cloud; local-saliency is free.
-    if (usingSam) recordMagic(targets.length);
+    if (usingReplicate) recordMagic(targets.length);
     logEnd(logId, {
       status: "success",
       durationMs: Date.now() - start,
