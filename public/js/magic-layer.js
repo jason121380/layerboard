@@ -44,9 +44,9 @@ const OCR_MIN_CONFIDENCE = 55;
 
 // Replicate SAM 2 — multi-object instance segmentation. Model can be
 // overridden via localStorage.replicate_model if a different SAM endpoint is
-// preferred. The default ships as a community automatic-mask SAM 2 model.
+// preferred. Default is Meta's official SAM 2 wrapper.
 const REPLICATE_API = "https://api.replicate.com/v1";
-const DEFAULT_SAM_MODEL = "lucataco/segment-anything-2";
+const DEFAULT_SAM_MODEL = "meta/sam-2";
 
 // ====================================================================
 // Shared helpers
