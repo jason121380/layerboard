@@ -20,9 +20,13 @@ import {
 import { magicLayerSelected, renderLayerPanel } from "./magic-layer.js";
 import { generateImages, exportSelectedItems, saveApiKey } from "./api.js";
 import { pushHistory, undo, redo } from "./history.js";
-import { loadBoard, scheduleAutoSave } from "./persist.js";
+import { loadBoard, scheduleAutoSave, flushBoard } from "./persist.js";
 import { renderUsage, initUsage, resetUsageCache } from "./usage.js";
 import { readLog, clearLog, initLog, resetLogCache } from "./generation-log.js";
+import {
+  initCanvases, initCanvasUi, render as renderCanvases,
+  onCanvasSwitch, resetCanvasesCache
+} from "./canvases.js";
 
 // ---------- Mixer resize ----------
 function handleMixerResizePointerDown(event) {
@@ -66,21 +70,36 @@ function handleMixerHandleClick(event) {
   toggleMixerHeight();
 }
 
-// ---------- Reload cloud data after API key change ----------
-async function reloadCloudData() {
-  // Wipe current board off the DOM.
+// ---------- Wipe DOM & in-memory board state ----------
+function clearBoardDom() {
   for (const item of state.items) item.el.remove();
   state.items = [];
   state.selectedIds.clear();
   state.primarySelectedId = null;
+}
+
+// ---------- Reload cloud data after API key change ----------
+async function reloadCloudData() {
+  clearBoardDom();
   // Drop caches so they re-fetch under the new identity.
   resetLogCache();
   resetUsageCache();
+  resetCanvasesCache();
   // Pull fresh data for the new key.
-  await Promise.all([initUsage(), initLog()]);
+  await Promise.all([initUsage(), initLog(), initCanvases()]);
   const saved = await loadBoard();
   for (const data of saved) createItem({ ...data, select: false });
   renderUsage();
+  renderCanvases();
+}
+
+// ---------- Canvas switch handler (passed to canvases.js) ----------
+async function handleCanvasSwitch(newCanvasId, { flushOnly = false } = {}) {
+  await flushBoard(); // make sure outgoing canvas is fully saved
+  if (flushOnly) return;
+  clearBoardDom();
+  const saved = await loadBoard(newCanvasId);
+  for (const data of saved) createItem({ ...data, select: false });
 }
 
 // ---------- API Key modal ----------
@@ -504,9 +523,12 @@ async function init() {
   setMixerHeight(state.mixerHeight);
   fitBoard(true);
   renderLayerPanel();
+  onCanvasSwitch(handleCanvasSwitch);
+  initCanvasUi();
   await loadHealth(); // resolve hasBackend before any cloud sync calls
-  await Promise.all([initUsage(), initLog()]);
+  await Promise.all([initUsage(), initLog(), initCanvases()]);
   renderUsage();
+  renderCanvases();
 
   const saved = await loadBoard();
   if (saved.length) {
