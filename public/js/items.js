@@ -431,6 +431,39 @@ export function handleBoardPointerDown(event) {
   if (event.target.closest(".board-item")) return;
   if (event.target.closest(".selection-bar, .mixer-card, .canvas-topbar, .api-modal")) return;
   if (event.target.matches("button, input, textarea, select")) return;
+
+  // Touch (mobile / PWA) — single finger pans the viewport instead of starting
+  // a marquee. The two-finger pinch handler in main.js still owns zoom.
+  // Mouse / pen continue to marquee-select as before.
+  if (event.pointerType === "touch") {
+    event.preventDefault();
+    const captureTarget = event.currentTarget;
+    captureTarget.setPointerCapture(event.pointerId);
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startPanX = state.boardPanX;
+    const startPanY = state.boardPanY;
+    let didDrag = false;
+    function onMove(moveEvent) {
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true;
+      state.boardPanX = startPanX + dx;
+      state.boardPanY = startPanY + dy;
+      applyBoardTransform();
+    }
+    function onUp() {
+      captureTarget.removeEventListener("pointermove", onMove);
+      captureTarget.removeEventListener("pointerup", onUp);
+      captureTarget.removeEventListener("pointercancel", onUp);
+      if (!didDrag) clearSelection(); // tap on empty area deselects
+    }
+    captureTarget.addEventListener("pointermove", onMove);
+    captureTarget.addEventListener("pointerup", onUp);
+    captureTarget.addEventListener("pointercancel", onUp);
+    return;
+  }
+
   event.preventDefault();
 
   const captureTarget = event.currentTarget; // .board-frame
