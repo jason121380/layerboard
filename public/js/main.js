@@ -542,7 +542,7 @@ async function init() {
   initGridToggle();
   setMixerHeight(state.mixerHeight);
   fitBoard(true);
-  setBoardZoom(state.boardScale); // sync the % label to fitBoard's chosen scale
+  setBoardZoom(0.2); // default initial zoom (overrides fitBoard's auto-fit)
   renderLayerPanel();
   onCanvasSwitch(handleCanvasSwitch);
   initCanvasUi();
