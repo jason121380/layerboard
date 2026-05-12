@@ -77,6 +77,32 @@
       </div>
 
 
+      <!-- ===== Canvas Name Modal (rename / create) ===== -->
+      <div id="canvasNameModal" class="api-modal" role="dialog" aria-modal="true" aria-label="畫布名稱" hidden>
+        <div class="api-modal-card">
+          <p id="canvasNameTitle" class="api-modal-title">畫布名稱</p>
+          <label class="api-modal-field">
+            <input id="canvasNameInput" class="api-modal-input" type="text" maxlength="80" autocomplete="off" spellcheck="false" placeholder="畫布名稱" />
+          </label>
+          <div class="api-modal-actions">
+            <button id="canvasNameCancel" class="api-modal-cancel" type="button">取消</button>
+            <button id="canvasNameSave" class="api-modal-save" type="button">確認</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== Canvas Delete Confirm Modal ===== -->
+      <div id="canvasDeleteModal" class="api-modal" role="dialog" aria-modal="true" aria-label="刪除畫布" hidden>
+        <div class="api-modal-card">
+          <p class="api-modal-title">刪除畫布</p>
+          <p id="canvasDeleteMessage" class="api-modal-message">確定要刪除這張畫布嗎？此操作無法復原。</p>
+          <div class="api-modal-actions">
+            <button id="canvasDeleteCancel" class="api-modal-cancel" type="button">取消</button>
+            <button id="canvasDeleteConfirm" class="api-modal-save api-modal-danger" type="button">刪除</button>
+          </div>
+        </div>
+      </div>
+
       <!-- ===== Canvas list (left middle) ===== -->
       <aside class="canvas-list" aria-label="畫布列表" hidden>
         <button id="canvasAddBtn" class="canvas-add" type="button" title="新增畫布" aria-label="新增畫布">＋</button>

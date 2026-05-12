@@ -109,10 +109,84 @@ async function switchTo(id) {
   render();
 }
 
+// ---------- Styled modals (replace native prompt/confirm) ----------
+function promptName({ title, value = "", placeholder = "畫布名稱" }) {
+  return new Promise((resolve) => {
+    const modal = document.querySelector("#canvasNameModal");
+    const titleEl = modal?.querySelector("#canvasNameTitle");
+    const input = modal?.querySelector("#canvasNameInput");
+    const save = modal?.querySelector("#canvasNameSave");
+    const cancel = modal?.querySelector("#canvasNameCancel");
+    if (!modal || !titleEl || !input || !save || !cancel) {
+      resolve(null);
+      return;
+    }
+    titleEl.textContent = title;
+    input.value = value;
+    input.placeholder = placeholder;
+    modal.hidden = false;
+    setTimeout(() => { input.focus(); input.select(); }, 0);
+
+    function cleanup() {
+      modal.hidden = true;
+      save.removeEventListener("click", onSave);
+      cancel.removeEventListener("click", onCancel);
+      modal.removeEventListener("click", onBackdrop);
+      input.removeEventListener("keydown", onKey);
+    }
+    function onSave() { const v = input.value.trim(); cleanup(); resolve(v); }
+    function onCancel() { cleanup(); resolve(null); }
+    function onBackdrop(e) { if (e.target === modal) onCancel(); }
+    function onKey(e) {
+      if (e.key === "Enter") { e.preventDefault(); onSave(); }
+      else if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+    }
+    save.addEventListener("click", onSave);
+    cancel.addEventListener("click", onCancel);
+    modal.addEventListener("click", onBackdrop);
+    input.addEventListener("keydown", onKey);
+  });
+}
+
+function confirmDelete(canvasName) {
+  return new Promise((resolve) => {
+    const modal = document.querySelector("#canvasDeleteModal");
+    const msg = modal?.querySelector("#canvasDeleteMessage");
+    const ok = modal?.querySelector("#canvasDeleteConfirm");
+    const cancel = modal?.querySelector("#canvasDeleteCancel");
+    if (!modal || !ok || !cancel) { resolve(false); return; }
+    if (msg) msg.textContent = `確定要刪除畫布「${canvasName}」嗎？此操作無法復原。`;
+    modal.hidden = false;
+    setTimeout(() => ok.focus(), 0);
+
+    function cleanup() {
+      modal.hidden = true;
+      ok.removeEventListener("click", onOk);
+      cancel.removeEventListener("click", onCancel);
+      modal.removeEventListener("click", onBackdrop);
+      document.removeEventListener("keydown", onKey);
+    }
+    function onOk() { cleanup(); resolve(true); }
+    function onCancel() { cleanup(); resolve(false); }
+    function onBackdrop(e) { if (e.target === modal) onCancel(); }
+    function onKey(e) {
+      if (e.key === "Enter") { e.preventDefault(); onOk(); }
+      else if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+    }
+    ok.addEventListener("click", onOk);
+    cancel.addEventListener("click", onCancel);
+    modal.addEventListener("click", onBackdrop);
+    document.addEventListener("keydown", onKey);
+  });
+}
+
 export async function createCanvas() {
   if (!canSync()) { showToast("請先輸入 OpenAI Key。"); return; }
-  const name = (prompt("畫布名稱？", `畫布 ${cache.canvases.length + 1}`) || "").trim();
-  if (!name) return;
+  const name = await promptName({
+    title: "新增畫布",
+    value: `畫布 ${cache.canvases.length + 1}`
+  });
+  if (name === null || !name) return;
   // Flush outgoing first (activeCanvasId still old) so unsaved edits aren't lost.
   if (switchHandler) await switchHandler({ outgoingFlush: true });
   try {
@@ -129,8 +203,8 @@ export async function createCanvas() {
 async function renameCanvas(id) {
   const current = cache.canvases.find((c) => c.id === id);
   if (!current) return;
-  const name = (prompt("新名稱？", current.name) || "").trim();
-  if (!name || name === current.name) return;
+  const name = await promptName({ title: "重新命名畫布", value: current.name });
+  if (name === null || !name || name === current.name) return;
   try {
     const data = await apiRename(id, name);
     const i = cache.canvases.findIndex((c) => c.id === id);
@@ -148,7 +222,7 @@ async function deleteCanvas(id) {
   }
   const current = cache.canvases.find((c) => c.id === id);
   if (!current) return;
-  if (!confirm(`刪除畫布「${current.name}」？此操作無法復原。`)) return;
+  if (!(await confirmDelete(current.name))) return;
   const wasActive = id === cache.activeCanvasId;
   try {
     const data = await apiDelete(id);
