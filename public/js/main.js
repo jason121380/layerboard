@@ -369,18 +369,6 @@ function bindEvents() {
     if (e.key === "Escape") closeAspectMenu();
   });
 
-  // Layered-mode toggle: when on, the Generate button routes through
-  // qwen/qwen-image-layered via the Replicate proxy instead of OpenAI.
-  const layeredToggle = document.querySelector("#layeredToggleBtn");
-  layeredToggle?.addEventListener("click", () => {
-    state.layeredMode = !state.layeredMode;
-    layeredToggle.setAttribute("aria-pressed", String(state.layeredMode));
-    layeredToggle.title = state.layeredMode
-      ? "分層生成已啟用 (Qwen Image Layered)"
-      : "切換到「分層生成」（Qwen Image Layered）";
-    showToast(state.layeredMode ? "分層生成模式：使用 Qwen Image Layered" : "已切回 OpenAI 一般生成");
-  });
-
   // "查看提示詞" button on selection bar.
   document.querySelector("#promptBtn")?.addEventListener("click", () => {
     const primary = state.items.find((i) => i.id === state.primarySelectedId);

@@ -6,7 +6,7 @@ import { state, dom, showToast, showLoadingProgress } from "./state.js";
 import { loadImage, wrapText } from "./utils.js";
 import { createItem, getSelectedItems } from "./items.js";
 import { scheduleAutoSave } from "./persist.js";
-import { recordImages, recordMagic, USD_TO_TWD } from "./usage.js";
+import { recordImages, USD_TO_TWD } from "./usage.js";
 import { logStart, logEnd } from "./generation-log.js";
 
 export async function exportSelectedItems() {
@@ -268,141 +268,7 @@ function confirmGenerate(prompt, referenceItems = []) {
   });
 }
 
-// ---------- Qwen-Image-Layered (Replicate) ----------
-// Native layered output: one prediction returns multiple transparent PNGs
-// representing distinct semantic layers, no SAM post-processing needed.
-const QWEN_LAYERED_MODEL = "qwen/qwen-image-layered";
-
-async function runQwenLayered(prompt, replicateToken, onProgress) {
-  if (!replicateToken) throw new Error("尚未設定 Replicate Token（右上 ⚙ → Magic Layer 頁籤）");
-  const model = localStorage.getItem("qwen_layered_model") || QWEN_LAYERED_MODEL;
-
-  onProgress?.("Qwen Layered 啟動中…");
-  const startResp = await fetch("/api/replicate/start", {
-    method: "POST",
-    headers: {
-      "X-Replicate-Token": replicateToken,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ model, input: { prompt } })
-  });
-  let payload = await startResp.json().catch(() => ({}));
-  if (!startResp.ok) {
-    throw new Error(payload?.detail || payload?.title || payload?.error || `Replicate ${startResp.status}`);
-  }
-  while (payload.status && payload.status !== "succeeded" && payload.status !== "failed" && payload.status !== "canceled") {
-    onProgress?.(`Qwen ${payload.status}…`);
-    await new Promise((r) => setTimeout(r, 1800));
-    if (!payload.id) break;
-    const r = await fetch(`/api/replicate/status/${encodeURIComponent(payload.id)}`, {
-      headers: { "X-Replicate-Token": replicateToken }
-    });
-    payload = await r.json().catch(() => ({}));
-  }
-  if (payload.status !== "succeeded") {
-    throw new Error(payload.error || payload.detail || `Qwen ${payload.status || "unknown"}`);
-  }
-  // Output schema isn't fully verified — accept both a single URL string and
-  // an array of URLs / objects with .url.
-  const out = payload.output;
-  if (!out) return [];
-  if (typeof out === "string") return [out];
-  if (Array.isArray(out)) {
-    return out
-      .map((o) => (typeof o === "string" ? o : (o?.url || o?.image || null)))
-      .filter(Boolean);
-  }
-  if (typeof out === "object") {
-    if (Array.isArray(out.images)) return runQwenLayered.normalise(out.images);
-    if (Array.isArray(out.layers)) return runQwenLayered.normalise(out.layers);
-  }
-  return [];
-}
-
-async function generateLayeredImages({ forceConfirm }) {
-  const prompt = dom.promptInput?.value.trim() || "";
-  if (!prompt) {
-    showToast("先寫一段 prompt。");
-    dom.promptInput?.focus();
-    return;
-  }
-  const replicateToken = localStorage.getItem("replicate_api_token") || "";
-  if (!replicateToken) {
-    showToast("請先到右上 ⚙ → Magic Layer 設定 Replicate Token。");
-    return;
-  }
-
-  setLoading(true);
-  const start = Date.now();
-  const progress = showLoadingProgress("Qwen Layered 啟動中…");
-  const logId = logStart({
-    prompt,
-    mode: "qwen-layered",
-    referenceCount: 0,
-    aspectRatio: state.aspectRatio || "square",
-    model: localStorage.getItem("qwen_layered_model") || QWEN_LAYERED_MODEL,
-    backend: state.hasBackend === true ? "server" : "direct"
-  });
-  const tick = window.setInterval(() => {
-    const sec = Math.floor((Date.now() - start) / 1000);
-    progress.update(`分層生成中… ${sec} 秒（Qwen 通常 20–40 秒）`);
-  }, 500);
-
-  try {
-    const urls = await runQwenLayered(prompt, replicateToken, (m) => progress.update(m));
-    if (!urls.length) throw new Error("Qwen 沒回傳任何圖層");
-
-    // Stack each layer on the board with a small offset so they're easy to pick.
-    const baseX = 1720 + Math.random() * 420;
-    const baseY = 690 + Math.random() * 360;
-    for (let i = 0; i < urls.length; i += 1) {
-      createItem({
-        type: "image",
-        src: urls[i],
-        fit: "contain",
-        x: Math.round(baseX + i * 24),
-        y: Math.round(baseY + i * 24),
-        width: 330,
-        height: 330,
-        prompt,
-        source: "qwen-layered",
-        caption: `Layer ${i + 1}`
-      });
-    }
-    // Bill via the magic-layer usage counter — same Replicate billing scope.
-    recordMagic(1);
-    scheduleAutoSave();
-
-    const sec = Math.max(1, Math.round((Date.now() - start) / 1000));
-    progress.end(`分層生成完成（${urls.length} 個圖層，${sec} 秒）。`);
-    logEnd(logId, {
-      status: "success",
-      durationMs: Date.now() - start,
-      imageCount: urls.length
-    });
-    if (dom.promptInput) {
-      dom.promptInput.value = "";
-      dom.promptInput.style.height = "auto";
-    }
-  } catch (error) {
-    progress.end(`分層生成失敗：${error.message}`);
-    logEnd(logId, {
-      status: "failed",
-      durationMs: Date.now() - start,
-      error: error.message || String(error)
-    });
-  } finally {
-    window.clearInterval(tick);
-    setLoading(false);
-  }
-}
-
 export async function generateImages({ forceConfirm = false } = {}) {
-  // Layered mode short-circuits to Qwen; treat it as a separate code path so
-  // OpenAI's flow is unaffected.
-  if (state.layeredMode) {
-    return generateLayeredImages({ forceConfirm });
-  }
   const prompt = dom.promptInput?.value.trim() || "";
   if (!prompt) {
     showToast("先寫一段 prompt。");
