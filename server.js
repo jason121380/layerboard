@@ -1,5 +1,5 @@
 import http from "node:http";
-import { readFile, writeFile, mkdir, rename, unlink } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rename, unlink, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Buffer, Blob } from "node:buffer";
@@ -429,12 +429,41 @@ async function handleGenerate(req, res) {
   }
 }
 
+// ---------- Volume mount detection ----------
+// `/src/data` could be (a) a mounted persistent volume (durable) or
+// (b) just a directory on the container's rootfs (ephemeral — wiped on every
+// redeploy). Compare the inode device id of DATA_DIR against `/`; if they
+// differ, DATA_DIR is on a separate filesystem = real volume.
+let dataDirIsVolume = null;
+
+async function detectVolumeMount() {
+  try {
+    const [dataStats, rootStats] = await Promise.all([stat(DATA_DIR), stat("/")]);
+    dataDirIsVolume = dataStats.dev !== rootStats.dev;
+  } catch {
+    dataDirIsVolume = false;
+  }
+  if (dataDirIsVolume) {
+    console.log(`✓ ${DATA_DIR} is on a mounted volume — data will persist across redeploys.`);
+  } else {
+    console.warn("");
+    console.warn("⚠⚠⚠ ────────────────────────────────────────────────────────────");
+    console.warn(`⚠⚠⚠  WARNING: ${DATA_DIR} is NOT a mounted volume.`);
+    console.warn("⚠⚠⚠  All cloud-sync data will be LOST on the next redeploy.");
+    console.warn(`⚠⚠⚠  Fix on Zeabur: service → 硬碟 → ＋ 掛載硬碟 → Mount Path = ${DATA_DIR}`);
+    console.warn("⚠⚠⚠ ────────────────────────────────────────────────────────────");
+    console.warn("");
+  }
+}
+
 function handleHealth(_req, res) {
   sendJson(res, 200, {
     status: "ok",
     model: IMAGE_MODEL,
     hasKey: Boolean(process.env.OPENAI_API_KEY),
-    cloudSync: true
+    cloudSync: true,
+    dataDir: DATA_DIR,
+    volumeMounted: dataDirIsVolume === true
   });
 }
 
@@ -536,6 +565,7 @@ server.listen(PORT, HOST, async () => {
   } catch (err) {
     console.error("[server] Failed to create data dir:", err);
   }
+  await detectVolumeMount();
   if (!process.env.OPENAI_API_KEY) {
     console.warn("⚠  OPENAI_API_KEY is not set. /api/generate will return 400 without per-request key.");
   }

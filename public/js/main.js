@@ -70,6 +70,15 @@ function handleMixerHandleClick(event) {
   toggleMixerHeight();
 }
 
+// ---------- Board zoom ----------
+function setBoardZoom(scale) {
+  state.boardScale = Math.max(0.05, Math.min(2, scale));
+  applyBoardTransform();
+  const label = document.querySelector("#zoomResetBtn");
+  if (label) label.textContent = `${Math.round(state.boardScale * 100)}%`;
+  repositionSelectionBar();
+}
+
 // ---------- Wipe DOM & in-memory board state ----------
 function clearBoardDom() {
   for (const item of state.items) item.el.remove();
@@ -398,16 +407,20 @@ function bindEvents() {
   boardFrame?.addEventListener("wheel", (e) => {
     e.preventDefault();
     if (e.ctrlKey) {
-      const newScale = Math.max(0.05, Math.min(2, state.boardScale * (1 - e.deltaY * 0.008)));
-      state.boardScale = newScale;
+      setBoardZoom(state.boardScale * (1 - e.deltaY * 0.008));
     } else {
       // Natural-scroll semantics: swipe down → look further down → translate board up.
       state.boardPanX -= e.deltaX;
       state.boardPanY -= e.deltaY;
+      applyBoardTransform();
+      repositionSelectionBar();
     }
-    applyBoardTransform();
-    repositionSelectionBar();
   }, { passive: false });
+
+  // Zoom controls (bottom-left)
+  document.querySelector("#zoomInBtn")?.addEventListener("click", () => setBoardZoom(state.boardScale * 1.2));
+  document.querySelector("#zoomOutBtn")?.addEventListener("click", () => setBoardZoom(state.boardScale / 1.2));
+  document.querySelector("#zoomResetBtn")?.addEventListener("click", () => setBoardZoom(1));
 
   // Drag & drop image files
   const dropOverlay = document.createElement("div");
@@ -529,6 +542,7 @@ async function init() {
   initGridToggle();
   setMixerHeight(state.mixerHeight);
   fitBoard(true);
+  setBoardZoom(state.boardScale); // sync the % label to fitBoard's chosen scale
   renderLayerPanel();
   onCanvasSwitch(handleCanvasSwitch);
   initCanvasUi();
