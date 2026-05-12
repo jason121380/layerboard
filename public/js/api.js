@@ -15,22 +15,24 @@ export async function exportSelectedItems() {
     showToast("請先選取要匯出的物件。");
     return;
   }
-  const minX = Math.min(...items.map((i) => i.x)) - 20;
-  const minY = Math.min(...items.map((i) => i.y)) - 20;
-  const maxX = Math.max(...items.map((i) => i.x + i.width)) + 20;
-  const maxY = Math.max(...items.map((i) => i.y + i.height)) + 20;
+  // Tight crop — no 20px padding, no white fill. The output keeps the source
+  // PNG alpha so transparent layers stay transparent in the exported file.
+  const minX = Math.min(...items.map((i) => i.x));
+  const minY = Math.min(...items.map((i) => i.y));
+  const maxX = Math.max(...items.map((i) => i.x + i.width));
+  const maxY = Math.max(...items.map((i) => i.y + i.height));
   const canvas = document.createElement("canvas");
   canvas.width = Math.ceil(maxX - minX);
   canvas.height = Math.ceil(maxY - minY);
   const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
   for (const item of [...items].sort((a, b) => a.z - b.z)) {
     ctx.globalAlpha = item.opacity ?? 1;
     try {
       const img = await loadImage(item.src);
       ctx.drawImage(img, item.x - minX, item.y - minY, item.width, item.height);
     } catch {
+      // Placeholder block when the source fails to load. Stays opaque so the
+      // user notices something went wrong rather than getting an invisible hole.
       ctx.fillStyle = "#ddd6c7";
       ctx.fillRect(item.x - minX, item.y - minY, item.width, item.height);
     }

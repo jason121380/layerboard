@@ -1131,7 +1131,9 @@ textarea, select, input[type="range"] { width: 100%; }
   min-height: 180px;
   border: 1px solid rgba(78, 86, 105, 0.12);
   border-radius: 4px;
-  background: #fff;
+  /* Transparent so PNGs with an alpha channel look transparent, not white-on-white.
+   * The border + shadow still gives the "card" affordance. */
+  background: transparent;
   box-shadow: 0 6px 16px rgba(24, 29, 40, 0.1);
   user-select: none;
   touch-action: none;
