@@ -31,8 +31,14 @@ export function usdToTwd(usd) {
   return Math.round(usd * USD_TO_TWD);
 }
 
+/** Format USD as TWD. Below NT$ 10 we keep up to 2 decimals so micro-spend
+ *  doesn't round away to "NT$ 0" (e.g. one SAM call ≈ $0.005 ≈ NT$ 0.16). */
 export function formatTwd(usd) {
-  return `NT$ ${usdToTwd(usd).toLocaleString("zh-TW")}`;
+  const twd = (Number(usd) || 0) * USD_TO_TWD;
+  if (!twd) return "NT$ 0";
+  if (twd >= 10) return `NT$ ${Math.round(twd).toLocaleString("zh-TW")}`;
+  // Trim trailing zeros from "0.16" / "1.60" → "0.16" / "1.6".
+  return `NT$ ${parseFloat(twd.toFixed(2))}`;
 }
 
 export async function initUsage() {
