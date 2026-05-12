@@ -1490,6 +1490,204 @@ textarea, select, input[type="range"] { width: 100%; }
 }
 .api-modal-danger:hover { background: #b91c1c !important; }
 
+/* ---------- Settings modal (gear icon) ---------- */
+.settings-card {
+  width: min(540px, calc(100vw - 32px));
+  max-height: min(86vh, 720px);
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.settings-header .api-modal-title { margin: 0; }
+.settings-close {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  color: #58575e;
+  font-size: 15px;
+  cursor: pointer;
+}
+.settings-close:hover { background: rgba(0, 0, 0, 0.06); color: var(--ink); }
+
+.settings-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.04);
+}
+.settings-tab {
+  flex: 1;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #58575e;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+.settings-tab:hover { color: var(--ink); }
+.settings-tab.active {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.settings-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2px;
+}
+.settings-panel[hidden] { display: none; }
+
+.settings-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 12px 0;
+}
+.stat-card {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f8f9fb;
+  border: 1px solid #e0e2e8;
+}
+.stat-label {
+  font-size: 11px;
+  color: #8b8b92;
+  margin-bottom: 4px;
+}
+.stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 14px 0 8px;
+}
+.settings-log-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #58575e;
+}
+.settings-log-clear {
+  height: 24px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(220, 38, 38, 0.08);
+  color: #dc2626;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.settings-log-clear:hover { background: rgba(220, 38, 38, 0.18); }
+
+.settings-log {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 10px;
+  background: #f8f9fb;
+  border: 1px solid #e0e2e8;
+}
+.settings-log-empty {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: #8b8b92;
+}
+.settings-log .log-entry {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+.settings-log .log-entry + .log-entry { border-top: 1px solid rgba(0, 0, 0, 0.04); }
+.settings-log .log-status {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 11px;
+  line-height: 1;
+}
+.settings-log .log-status-success { background: rgba(34, 197, 94, 0.16); color: #15803d; }
+.settings-log .log-status-failed { background: rgba(220, 38, 38, 0.14); color: #b91c1c; }
+.settings-log .log-status-pending { background: rgba(0, 0, 0, 0.06); color: #58575e; }
+.settings-log .log-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.settings-log .log-time { font-size: 11px; color: #8b8b92; font-variant-numeric: tabular-nums; }
+.settings-log .log-tag {
+  display: inline-block;
+  padding: 0 6px;
+  height: 18px;
+  line-height: 18px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.05);
+  color: #58575e;
+  font-size: 10px;
+  font-weight: 500;
+}
+.settings-log .log-tag.tag-success { background: rgba(34, 197, 94, 0.16); color: #166534; }
+.settings-log .log-prompt {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--ink);
+  word-break: break-word;
+}
+.settings-log .log-error {
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: rgba(220, 38, 38, 0.06);
+  border: 1px solid rgba(220, 38, 38, 0.15);
+  border-radius: 6px;
+  font-size: 11px;
+  color: #b91c1c;
+  white-space: pre-wrap;
+}
+
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f8f9fb;
+  border: 1px solid #e0e2e8;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+}
+.settings-toggle-row input { transform: scale(1.1); cursor: pointer; }
+
 /* ---------- 9b. Zoom control (bottom-left) ---------- */
 .zoom-control {
   pointer-events: auto;

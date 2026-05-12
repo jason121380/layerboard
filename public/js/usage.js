@@ -12,9 +12,10 @@
 import { state } from "./state.js";
 
 const PRICE_PER_IMAGE = 0.04;   // USD, rough estimate for gpt-image-2 standard 1024×1024
+const PRICE_PER_MAGIC = 0.005;  // USD, rough estimate for Replicate SAM 2 per call
 export const USD_TO_TWD = 32;    // Fixed conversion rate; update if needed.
 
-let cache = { count: 0, usd: 0 };
+let cache = { count: 0, usd: 0, magicCount: 0, magicUsd: 0 };
 let initPromise = null;
 let saveTimer = null;
 
@@ -46,19 +47,25 @@ export async function initUsage() {
       const data = await res.json();
       cache = {
         count: Number(data.count) || 0,
-        usd: Number(data.usd) || 0
+        usd: Number(data.usd) || 0,
+        magicCount: Number(data.magicCount) || 0,
+        magicUsd: Number(data.magicUsd) || 0
       };
     } catch (err) {
       console.warn("[usage] cloud load failed:", err);
-      cache = { count: 0, usd: 0 };
+      cache = { count: 0, usd: 0, magicCount: 0, magicUsd: 0 };
     }
   })();
   return initPromise;
 }
 
 export function resetUsageCache() {
-  cache = { count: 0, usd: 0 };
+  cache = { count: 0, usd: 0, magicCount: 0, magicUsd: 0 };
   initPromise = null;
+}
+
+export function getUsage() {
+  return { ...cache };
 }
 
 function scheduleSave() {
@@ -85,6 +92,13 @@ async function saveNow() {
 export function recordImages(n = 1, priceEach = PRICE_PER_IMAGE) {
   cache.count += n;
   cache.usd = Math.round((cache.usd + priceEach * n) * 10000) / 10000;
+  scheduleSave();
+  renderUsage();
+}
+
+export function recordMagic(n = 1, priceEach = PRICE_PER_MAGIC) {
+  cache.magicCount = (cache.magicCount || 0) + n;
+  cache.magicUsd = Math.round(((cache.magicUsd || 0) + priceEach * n) * 10000) / 10000;
   scheduleSave();
   renderUsage();
 }
