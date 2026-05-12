@@ -1490,6 +1490,58 @@ textarea, select, input[type="range"] { width: 100%; }
 }
 .api-modal-danger:hover { background: #b91c1c !important; }
 
+/* ---------- 9b. Zoom control (bottom-left) ---------- */
+.zoom-control {
+  pointer-events: auto;
+  position: fixed;
+  z-index: 35;
+  left: 16px;
+  bottom: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  border: 1px solid rgba(38, 37, 42, 0.08);
+  box-shadow: 0 6px 18px rgba(26, 28, 34, 0.08);
+}
+
+.zoom-btn,
+.zoom-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: #58575e;
+  cursor: pointer;
+  border-radius: 999px;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.zoom-btn { width: 30px; }
+.zoom-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--ink);
+}
+
+.zoom-label {
+  min-width: 52px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.zoom-label:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--ink);
+}
+
 /* ---------- 10. Responsive ---------- */
 @media (max-width: 900px) {
   .canvas-topbar { inset: 14px 14px auto 14px; }
@@ -1621,6 +1673,17 @@ textarea, select, input[type="range"] { width: 100%; }
     width: min(400px, calc(100vw - 24px));
     padding: 18px;
   }
+
+  /* Lift the zoom widget above the mixer card on phones, and shrink it. */
+  .zoom-control {
+    left: 8px;
+    bottom: 96px;
+    padding: 3px;
+  }
+  .zoom-btn,
+  .zoom-label { height: 26px; }
+  .zoom-btn { width: 26px; }
+  .zoom-label { min-width: 44px; font-size: 11px; }
 
   /* Slim canvas list to keep board readable on phones. */
   .canvas-list {

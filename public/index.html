@@ -169,6 +169,17 @@
         </div>
       </div>
 
+      <!-- ===== Zoom control (bottom-left) ===== -->
+      <div class="zoom-control" role="group" aria-label="縮放控制">
+        <button id="zoomOutBtn" class="zoom-btn" type="button" aria-label="縮小" title="縮小 (Ctrl + 滾輪)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button id="zoomResetBtn" class="zoom-label" type="button" aria-label="重設為 100%" title="重設縮放">100%</button>
+        <button id="zoomInBtn" class="zoom-btn" type="button" aria-label="放大" title="放大 (Ctrl + 滾輪)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div>
+
       <!-- ===== Mixer card (prompt panel) ===== -->
       <section class="mixer-card visible" aria-label="Mixboard prompt">
         <div id="mixerSelectionChip" class="mixer-selection-chip" hidden>
