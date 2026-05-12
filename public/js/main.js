@@ -94,12 +94,19 @@ async function reloadCloudData() {
 }
 
 // ---------- Canvas switch handler (passed to canvases.js) ----------
-async function handleCanvasSwitch(newCanvasId, { flushOnly = false } = {}) {
-  await flushBoard(); // make sure outgoing canvas is fully saved
-  if (flushOnly) return;
-  clearBoardDom();
-  const saved = await loadBoard(newCanvasId);
-  for (const data of saved) createItem({ ...data, select: false });
+// Called in two phases: { outgoingFlush } before activeCanvasId changes,
+// then { incomingId } after, so persist.js writes/reads against the correct
+// canvas at each step.
+async function handleCanvasSwitch({ outgoingFlush = false, incomingId = null } = {}) {
+  if (outgoingFlush) {
+    await flushBoard();
+    return;
+  }
+  if (incomingId) {
+    clearBoardDom();
+    const saved = await loadBoard(incomingId);
+    for (const data of saved) createItem({ ...data, select: false });
+  }
 }
 
 // ---------- API Key modal ----------

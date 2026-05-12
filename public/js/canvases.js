@@ -91,14 +91,21 @@ async function apiSetActive(id) {
 }
 
 // ---------- Public ops (wire callbacks from main.js) ----------
+//
+// IMPORTANT: the switch flow must do { flush } BEFORE updating
+// cache.activeCanvasId, then { load } AFTER. If you change activeCanvasId
+// first, persist.js's saveNow() will read the new id and write the OUTGOING
+// canvas's items into the INCOMING canvas's file — which is exactly the
+// "the two canvases are connected" bug that was reported.
 let switchHandler = null;
 export function onCanvasSwitch(fn) { switchHandler = fn; }
 
 async function switchTo(id) {
   if (!id || id === cache.activeCanvasId) return;
+  if (switchHandler) await switchHandler({ outgoingFlush: true });
   cache.activeCanvasId = id;
   try { await apiSetActive(id); } catch (err) { console.warn("[canvases] active failed:", err); }
-  if (switchHandler) await switchHandler(id);
+  if (switchHandler) await switchHandler({ incomingId: id });
   render();
 }
 
@@ -106,13 +113,13 @@ export async function createCanvas() {
   if (!canSync()) { showToast("請先輸入 OpenAI Key。"); return; }
   const name = (prompt("畫布名稱？", `畫布 ${cache.canvases.length + 1}`) || "").trim();
   if (!name) return;
-  // Flush current board before switching so user doesn't lose unsaved edits.
-  if (switchHandler) await switchHandler(null, { flushOnly: true });
+  // Flush outgoing first (activeCanvasId still old) so unsaved edits aren't lost.
+  if (switchHandler) await switchHandler({ outgoingFlush: true });
   try {
     const data = await apiCreate(name);
     cache.canvases.push(data.canvas);
     cache.activeCanvasId = data.activeCanvasId;
-    if (switchHandler) await switchHandler(cache.activeCanvasId);
+    if (switchHandler) await switchHandler({ incomingId: cache.activeCanvasId });
     render();
   } catch (err) {
     showToast(`新增失敗：${err.message}`);
@@ -147,7 +154,9 @@ async function deleteCanvas(id) {
     const data = await apiDelete(id);
     cache.canvases = cache.canvases.filter((c) => c.id !== id);
     cache.activeCanvasId = data.activeCanvasId;
-    if (wasActive && switchHandler) await switchHandler(cache.activeCanvasId);
+    // Skip outgoingFlush — the deleted canvas is gone on the server; flushing
+    // would overwrite the new active canvas with the deleted board's items.
+    if (wasActive && switchHandler) await switchHandler({ incomingId: cache.activeCanvasId });
     render();
   } catch (err) {
     showToast(`刪除失敗：${err.message}`);
