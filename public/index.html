@@ -17,7 +17,6 @@
         <div class="status-chip" aria-live="polite">
           <span class="status-dot" id="statusDot"></span>
           <span id="modelLabel">gpt-image-2</span>
-          <span id="usageLabel" class="usage-label" hidden></span>
         </div>
         <button id="settingsBtn" class="topbar-icon-btn" type="button" title="設定" aria-label="設定">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -68,8 +67,8 @@
               <input id="settingsReplicateKey" class="api-modal-input" type="password" placeholder="r8_..." autocomplete="off" spellcheck="false" />
             </label>
             <label class="api-modal-field">
-              <span class="api-modal-field-label">Replicate Model <small>（選填，預設 lucataco/segment-anything-2）</small></span>
-              <input id="settingsReplicateModel" class="api-modal-input" type="text" placeholder="owner/name" autocomplete="off" spellcheck="false" />
+              <span class="api-modal-field-label">Replicate Model <small>（選填，預設 lucataco/segment-anything-2 含 pinned version）</small></span>
+              <input id="settingsReplicateModel" class="api-modal-input" type="text" placeholder="owner/name 或 owner/name:version_hash" autocomplete="off" spellcheck="false" />
             </label>
             <div class="settings-stats">
               <div class="stat-card">
