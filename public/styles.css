@@ -82,6 +82,8 @@ textarea, select, input[type="range"] { width: 100%; }
 .board-frame {
   overflow: hidden;
   background: transparent;
+  /* Suppress native pan/zoom so our pinch handler in main.js drives the board. */
+  touch-action: none;
 }
 
 .board {

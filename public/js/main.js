@@ -22,7 +22,7 @@ import {
 import { magicLayerSelected, renderLayerPanel } from "./magic-layer.js";
 import { generateImages, exportSelectedItems, saveApiKey } from "./api.js";
 import { pushHistory, undo, redo } from "./history.js";
-import { loadBoard, scheduleAutoSave, flushBoard } from "./persist.js";
+import { loadBoard, scheduleAutoSave, flushBoard, resetPersistCache } from "./persist.js";
 import { renderUsage, initUsage, resetUsageCache, getUsage, formatTwd } from "./usage.js";
 import { readLog, clearLog, initLog, resetLogCache } from "./generation-log.js";
 import {
@@ -96,6 +96,7 @@ async function reloadCloudData() {
   resetLogCache();
   resetUsageCache();
   resetCanvasesCache();
+  resetPersistCache();
   // Pull fresh data for the new key.
   await Promise.all([initUsage(), initLog(), initCanvases()]);
   const saved = await loadBoard();
@@ -425,6 +426,38 @@ function bindEvents() {
   document.querySelector("#zoomInBtn")?.addEventListener("click", () => setBoardZoom(state.boardScale * 1.2));
   document.querySelector("#zoomOutBtn")?.addEventListener("click", () => setBoardZoom(state.boardScale / 1.2));
   document.querySelector("#zoomResetBtn")?.addEventListener("click", () => setBoardZoom(1));
+
+  // Mobile / PWA: two-finger pinch zoom on the board frame.
+  // The page-level viewport is locked (user-scalable=no), so the browser won't
+  // intercept the gesture; we handle it ourselves and feed it through
+  // setBoardZoom so the % label stays in sync.
+  const touchPointers = new Map();
+  let lastPinchDist = null;
+  boardFrame?.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== "touch") return;
+    touchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touchPointers.size === 2) {
+      const [a, b] = [...touchPointers.values()];
+      lastPinchDist = Math.hypot(a.x - b.x, a.y - b.y);
+    }
+  });
+  boardFrame?.addEventListener("pointermove", (e) => {
+    if (e.pointerType !== "touch" || !touchPointers.has(e.pointerId)) return;
+    touchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touchPointers.size === 2 && lastPinchDist) {
+      const [a, b] = [...touchPointers.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      if (dist > 0) setBoardZoom(state.boardScale * (dist / lastPinchDist));
+      lastPinchDist = dist;
+    }
+  });
+  const endTouch = (e) => {
+    if (e.pointerType !== "touch") return;
+    touchPointers.delete(e.pointerId);
+    if (touchPointers.size < 2) lastPinchDist = null;
+  };
+  boardFrame?.addEventListener("pointerup", endTouch);
+  boardFrame?.addEventListener("pointercancel", endTouch);
 
   // Drag & drop image files
   const dropOverlay = document.createElement("div");
