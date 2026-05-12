@@ -82,6 +82,8 @@ textarea, select, input[type="range"] { width: 100%; }
 .board-frame {
   overflow: hidden;
   background: transparent;
+  /* Suppress native pan/zoom so our pinch handler in main.js drives the board. */
+  touch-action: none;
 }
 
 .board {
@@ -1656,6 +1658,13 @@ textarea, select, input[type="range"] { width: 100%; }
   font-weight: 500;
 }
 .settings-log .log-tag.tag-success { background: rgba(34, 197, 94, 0.16); color: #166534; }
+.settings-log .log-tag.log-tag-model {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
 .settings-log .log-prompt {
   margin-top: 4px;
   font-size: 12px;
