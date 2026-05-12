@@ -33,6 +33,7 @@ import {
   syncItemElement,
   updateControls
 } from "./items.js";
+import { logStart, logEnd } from "./generation-log.js";
 
 const MAX_PROCESS_SIDE = 720;
 const KMEANS_SAMPLE_SIZE = 8000;
@@ -44,9 +45,10 @@ const OCR_MIN_CONFIDENCE = 55;
 
 // Replicate SAM 2 — multi-object instance segmentation. Model can be
 // overridden via localStorage.replicate_model if a different SAM endpoint is
-// preferred. Default is Meta's official SAM 2 wrapper.
+// preferred. lucataco/segment-anything-2 is community-maintained but the
+// auto-mask path is well-tested.
 const REPLICATE_API = "https://api.replicate.com/v1";
-const DEFAULT_SAM_MODEL = "meta/sam-2";
+const DEFAULT_SAM_MODEL = "lucataco/segment-anything-2";
 
 // ====================================================================
 // Shared helpers
@@ -1030,6 +1032,19 @@ export async function magicLayerSelected() {
   );
   setOcrProgressHook((label) => progress.update(label));
 
+  const usingSam = getReplicateToken() && (mode === "auto" || mode === "sam");
+  const start = Date.now();
+  const logId = logStart({
+    mode: "magic-layer",
+    layerMode: mode,
+    prompt: `Magic Layer × ${targets.length}`,
+    imageCount: targets.length,
+    model: usingSam
+      ? `replicate:${localStorage.getItem("replicate_model") || DEFAULT_SAM_MODEL}`
+      : "local-saliency",
+    backend: state.hasBackend === true ? "server" : "direct"
+  });
+
   try {
     const createdLayers = [];
     let lastGroup = null;
@@ -1047,6 +1062,12 @@ export async function magicLayerSelected() {
         ? "這張圖沒有偵測到文字，原圖層保持不變。"
         : "沒有分出可用的圖層。試試別張圖或調整 sensitivity。";
       progress.end(autoMsg);
+      logEnd(logId, {
+        status: "success",
+        durationMs: Date.now() - start,
+        layerCount: 0,
+        textCount: 0
+      });
       return;
     }
 
@@ -1058,8 +1079,19 @@ export async function magicLayerSelected() {
       ? `拆出 ${textCount} 段可編輯文字${layerCount ? ` + ${layerCount} 個圖層` : ""}。`
       : `從 ${targets.length} 張圖拆出 ${createdLayers.length} 個圖層。`;
     progress.end(summary);
+    logEnd(logId, {
+      status: "success",
+      durationMs: Date.now() - start,
+      layerCount,
+      textCount
+    });
   } catch (error) {
     progress.end(`拆解失敗：${error.message}`);
+    logEnd(logId, {
+      status: "failed",
+      durationMs: Date.now() - start,
+      error: error.message || String(error)
+    });
   } finally {
     setOcrProgressHook(null);
     if (dom.magicBtn) dom.magicBtn.classList.remove("is-busy");

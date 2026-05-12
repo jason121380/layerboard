@@ -212,13 +212,24 @@ function initHistoryModal() {
       return;
     }
     list.innerHTML = entries.map((e) => {
+      const modeLabel =
+        e.mode === "magic-layer" ? "魔法圖層" :
+        e.mode === "edit" ? "編輯" : "生成";
+      const isMagic = e.mode === "magic-layer";
       const tags = [
-        `<span class="log-tag">${e.mode === "edit" ? "編輯" : "生成"}</span>`,
-        `<span class="log-tag">${e.aspectRatio || "square"}</span>`,
+        `<span class="log-tag">${modeLabel}</span>`,
+        // Magic-layer rows hide aspect ratio (not meaningful) and surface the
+        // sub-mode (auto / sam / subject / palette / text) instead.
+        isMagic
+          ? `<span class="log-tag">${e.layerMode || "auto"}</span>`
+          : `<span class="log-tag">${e.aspectRatio || "square"}</span>`,
         `<span class="log-tag">${e.model || "?"}</span>`,
         `<span class="log-tag">${e.backend || "?"}</span>`,
         e.referenceCount ? `<span class="log-tag">${e.referenceCount} 參考圖</span>` : "",
-        e.imageCount ? `<span class="log-tag tag-success">${e.imageCount} 張</span>` : ""
+        isMagic && e.imageCount ? `<span class="log-tag">${e.imageCount} 輸入</span>` : "",
+        !isMagic && e.imageCount ? `<span class="log-tag tag-success">${e.imageCount} 張</span>` : "",
+        isMagic && e.textCount ? `<span class="log-tag tag-success">${e.textCount} 段文字</span>` : "",
+        isMagic && e.layerCount ? `<span class="log-tag tag-success">${e.layerCount} 圖層</span>` : ""
       ].filter(Boolean).join("");
       const errorBlock = e.status === "failed" && e.error
         ? `<div class="log-error">${e.error.replace(/</g, "&lt;")}</div>`
