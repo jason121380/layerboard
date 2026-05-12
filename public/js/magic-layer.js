@@ -45,11 +45,13 @@ const OCR_LANGS = ["eng", "chi_tra"];
 const OCR_MIN_CONFIDENCE = 55;
 
 // Replicate SAM 2 — multi-object instance segmentation. Model can be
-// overridden via localStorage.replicate_model if a different SAM endpoint is
-// preferred. lucataco/segment-anything-2 is community-maintained but the
-// auto-mask path is well-tested.
+// overridden via localStorage.replicate_model. The default pins a specific
+// version because the model-level predictions endpoint (without a hash) is
+// returning 404 for this owner/name as of 2026-05.
 const REPLICATE_API = "https://api.replicate.com/v1";
-const DEFAULT_SAM_MODEL = "lucataco/segment-anything-2";
+const DEFAULT_SAM_MODEL =
+  "lucataco/segment-anything-2:be7cbde9fdf0eecdc8b20ffec9dd0d1cfeace0832d4d0b58a071d993182e1be0";
+const DEFAULT_SAM_MASK_LIMIT = 12;
 
 // ====================================================================
 // Shared helpers
@@ -904,7 +906,10 @@ async function runSamMode(selected, onProgress) {
     },
     body: JSON.stringify({
       model,
-      input: { image: selected.src }
+      input: {
+        image: selected.src,
+        mask_limit: DEFAULT_SAM_MASK_LIMIT
+      }
     })
   });
   let payload = await startResp.json().catch(() => ({}));
