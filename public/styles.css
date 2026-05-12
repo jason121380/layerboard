@@ -1366,7 +1366,7 @@ textarea, select, input[type="range"] { width: 100%; }
 
 .canvas-add {
   width: 100%;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 4 / 3;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.4);
   color: #58575e;
@@ -1392,7 +1392,7 @@ textarea, select, input[type="range"] { width: 100%; }
 
 .canvas-item {
   position: relative;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 4 / 3;
   display: flex;
   align-items: center;
   justify-content: center;
