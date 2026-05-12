@@ -53,7 +53,11 @@ export const state = {
   boardPanX: 0,
   boardPanY: 0,
   // Output aspect ratio for new generations: "square" | "portrait" | "landscape"
-  aspectRatio: "square"
+  aspectRatio: "square",
+  // When true, Generate calls qwen/qwen-image-layered via Replicate proxy
+  // instead of OpenAI's gpt-image-2. Output goes onto the canvas as a stack of
+  // transparent layers.
+  layeredMode: false
 };
 
 export function applyBoardTransform() {
