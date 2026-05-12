@@ -167,12 +167,15 @@ function initSettingsModal() {
     container.innerHTML = entries.map((e) => {
       const isMagic = e.mode === "magic-layer";
       const modeLabel = isMagic ? "魔法圖層" : e.mode === "edit" ? "編輯" : "生成";
+      // Trim the trailing :version-hash for display — it bloats the row and
+      // the hash isn't actionable info for the user.
+      const modelLabel = (e.model || "?").split(":").slice(0, 2).join(":");
       const tags = [
         `<span class="log-tag">${modeLabel}</span>`,
         isMagic
           ? `<span class="log-tag">${e.layerMode || "auto"}</span>`
           : `<span class="log-tag">${e.aspectRatio || "square"}</span>`,
-        `<span class="log-tag">${e.model || "?"}</span>`,
+        `<span class="log-tag log-tag-model" title="${escape(e.model || "")}">${escape(modelLabel)}</span>`,
         e.referenceCount ? `<span class="log-tag">${e.referenceCount} 參考圖</span>` : "",
         isMagic && e.imageCount ? `<span class="log-tag">${e.imageCount} 輸入</span>` : "",
         !isMagic && e.imageCount ? `<span class="log-tag tag-success">${e.imageCount} 張</span>` : "",
