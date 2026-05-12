@@ -132,7 +132,20 @@ function initSettingsModal() {
   const openaiInput = document.querySelector("#settingsOpenaiKey");
   const replicateInput = document.querySelector("#settingsReplicateKey");
   const replicateModelInput = document.querySelector("#settingsReplicateModel");
+  const numLayersRange = document.querySelector("#settingsNumLayers");
+  const numLayersValue = document.querySelector("#settingsNumLayersValue");
   const gridToggle = document.querySelector("#settingsGridToggle");
+
+  function updateNumLayersUi(n) {
+    if (numLayersRange) numLayersRange.value = String(n);
+    if (numLayersValue) numLayersValue.textContent = String(n);
+    if (numLayersRange) {
+      const min = +numLayersRange.min, max = +numLayersRange.max;
+      const fill = ((n - min) / (max - min)) * 100;
+      numLayersRange.style.setProperty("--fill", fill + "%");
+    }
+  }
+  numLayersRange?.addEventListener("input", () => updateNumLayersUi(+numLayersRange.value));
   const tabs = modal?.querySelectorAll(".settings-tab");
   const panels = modal?.querySelectorAll(".settings-panel");
   if (!modal) return;
@@ -231,6 +244,7 @@ function initSettingsModal() {
     if (openaiInput) openaiInput.value = localStorage.getItem("openai_api_key") || "";
     if (replicateInput) replicateInput.value = localStorage.getItem("replicate_api_token") || "";
     if (replicateModelInput) replicateModelInput.value = localStorage.getItem("replicate_model") || "";
+    updateNumLayersUi(Number(localStorage.getItem("qwen_num_layers")) || 4);
     if (gridToggle && gridEl) gridToggle.checked = !gridEl.classList.contains("hidden");
     renderAll();
     modal.hidden = false;
@@ -271,6 +285,7 @@ function initSettingsModal() {
     const rmodel = (replicateModelInput?.value || "").trim();
     if (rmodel) localStorage.setItem("replicate_model", rmodel);
     else localStorage.removeItem("replicate_model");
+    if (numLayersRange) localStorage.setItem("qwen_num_layers", String(+numLayersRange.value || 4));
     closeModal();
     updateChipState();
     const after = (localStorage.getItem("openai_api_key") || "").trim();

@@ -1703,6 +1703,52 @@ textarea, select, input[type="range"] { width: 100%; }
   color: var(--ink);
   cursor: pointer;
 }
+
+.settings-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: #f8f9fb;
+  border: 1px solid #e0e2e8;
+}
+.settings-range {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--violet) 0 var(--fill, 50%), #e0e2e8 var(--fill, 50%) 100%);
+  outline: none;
+}
+.settings-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--violet);
+  box-shadow: 0 2px 4px rgba(26, 28, 34, 0.16);
+  cursor: pointer;
+}
+.settings-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--violet);
+  box-shadow: 0 2px 4px rgba(26, 28, 34, 0.16);
+  cursor: pointer;
+}
+.settings-range-value {
+  min-width: 28px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--violet);
+  font-variant-numeric: tabular-nums;
+}
 .settings-toggle-row input { transform: scale(1.1); cursor: pointer; }
 
 /* ---------- 9b. Zoom control (bottom-left) ---------- */
