@@ -916,7 +916,9 @@ async function runSamMode(selected, onProgress) {
         go_fast: true,
         num_layers: numLayers,
         description: "auto",
-        output_format: "webp",
+        // PNG preserves the alpha channel — WebP often gets emitted without
+        // transparency, so layers end up "white where it should be see-through".
+        output_format: "png",
         output_quality: 95
       }
     })
