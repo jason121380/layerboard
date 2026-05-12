@@ -166,7 +166,11 @@ function initSettingsModal() {
     }
     container.innerHTML = entries.map((e) => {
       const isMagic = e.mode === "magic-layer";
-      const modeLabel = isMagic ? "魔法圖層" : e.mode === "edit" ? "編輯" : "生成";
+      const isQwen = e.mode === "qwen-layered";
+      const modeLabel = isMagic ? "魔法圖層"
+        : isQwen ? "分層生成"
+        : e.mode === "edit" ? "編輯"
+        : "生成";
       // Trim the trailing :version-hash for display — it bloats the row and
       // the hash isn't actionable info for the user.
       const modelLabel = (e.model || "?").split(":").slice(0, 2).join(":");
@@ -209,15 +213,17 @@ function initSettingsModal() {
     document.querySelector("#magicStatCount").textContent = `${u.magicCount || 0} 次`;
     document.querySelector("#magicStatCost").textContent = formatTwd(u.magicUsd || 0);
     const all = readLog();
+    // Magic Layer tab also owns Qwen rows — both share the Replicate token.
+    const isReplicate = (e) => e.mode === "magic-layer" || e.mode === "qwen-layered";
     renderLogList(
       document.querySelector("#settingsGptLog"),
-      all.filter((e) => e.mode !== "magic-layer"),
+      all.filter((e) => !isReplicate(e)),
       "尚無生成紀錄。"
     );
     renderLogList(
       document.querySelector("#settingsMagicLog"),
-      all.filter((e) => e.mode === "magic-layer"),
-      "尚無 Magic Layer 紀錄。"
+      all.filter(isReplicate),
+      "尚無 Magic Layer / Qwen 紀錄。"
     );
   }
 
@@ -361,6 +367,18 @@ function bindEvents() {
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeAspectMenu();
+  });
+
+  // Layered-mode toggle: when on, the Generate button routes through
+  // qwen/qwen-image-layered via the Replicate proxy instead of OpenAI.
+  const layeredToggle = document.querySelector("#layeredToggleBtn");
+  layeredToggle?.addEventListener("click", () => {
+    state.layeredMode = !state.layeredMode;
+    layeredToggle.setAttribute("aria-pressed", String(state.layeredMode));
+    layeredToggle.title = state.layeredMode
+      ? "分層生成已啟用 (Qwen Image Layered)"
+      : "切換到「分層生成」（Qwen Image Layered）";
+    showToast(state.layeredMode ? "分層生成模式：使用 Qwen Image Layered" : "已切回 OpenAI 一般生成");
   });
 
   // "查看提示詞" button on selection bar.

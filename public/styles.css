@@ -698,6 +698,14 @@ textarea, select, input[type="range"] { width: 100%; }
   color: var(--violet);
 }
 
+.layered-toggle[aria-pressed="true"] {
+  background: rgba(150, 92, 255, 0.18);
+  color: var(--violet);
+}
+.layered-toggle[aria-pressed="true"]:hover {
+  background: rgba(150, 92, 255, 0.28);
+}
+
 #promptInput {
   min-height: 24px;
   max-height: 200px;
