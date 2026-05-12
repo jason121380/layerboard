@@ -18,10 +18,7 @@
           <img src="./logo.png" alt="Layerboard" class="logo" />
         </a>
         <span class="topbar-sep" aria-hidden="true"></span>
-        <div class="status-chip" aria-live="polite">
-          <span class="status-dot" id="statusDot"></span>
-          <span id="modelLabel">gpt-image-2</span>
-        </div>
+        <span id="modelLabel" hidden></span>
         <button id="settingsBtn" class="topbar-icon-btn" type="button" title="設定" aria-label="設定">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="3"/>
@@ -73,6 +70,13 @@
             <label class="api-modal-field">
               <span class="api-modal-field-label">Replicate Model <small>（選填，預設 qwen/qwen-image-layered）</small></span>
               <input id="settingsReplicateModel" class="api-modal-input" type="text" placeholder="owner/name 或 owner/name:version_hash" autocomplete="off" spellcheck="false" />
+            </label>
+            <label class="api-modal-field">
+              <span class="api-modal-field-label">圖層數量 <small>（單張圖要拆成幾層，建議 2–3）</small></span>
+              <div class="settings-slider-row">
+                <input id="settingsNumLayers" class="settings-range" type="range" min="1" max="6" step="1" />
+                <output id="settingsNumLayersValue" class="settings-range-value">4</output>
+              </div>
             </label>
             <div class="settings-stats">
               <div class="stat-card">
