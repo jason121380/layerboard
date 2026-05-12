@@ -44,9 +44,9 @@ const OCR_MIN_CONFIDENCE = 55;
 
 // Replicate SAM 2 — multi-object instance segmentation. Model can be
 // overridden via localStorage.replicate_model if a different SAM endpoint is
-// preferred. The default ships as a community automatic-mask SAM 2 model.
+// preferred. Default is Meta's official SAM 2 wrapper.
 const REPLICATE_API = "https://api.replicate.com/v1";
-const DEFAULT_SAM_MODEL = "lucataco/segment-anything-2";
+const DEFAULT_SAM_MODEL = "meta/sam-2";
 
 // ====================================================================
 // Shared helpers
@@ -891,35 +891,37 @@ async function runSamMode(selected, onProgress) {
   const model = localStorage.getItem("replicate_model") || DEFAULT_SAM_MODEL;
 
   onProgress?.("SAM 啟動中…");
-  const startResp = await fetch(`${REPLICATE_API}/models/${model}/predictions`, {
+  // Calls go through our backend proxy (server.js) because api.replicate.com
+  // doesn't return CORS headers for browser requests.
+  const startResp = await fetch("/api/replicate/start", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      Prefer: "wait=60"
+      "X-Replicate-Token": token,
+      "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      input: {
-        image: selected.src
-      }
+      model,
+      input: { image: selected.src }
     })
   });
   let payload = await startResp.json().catch(() => ({}));
   if (!startResp.ok) {
-    throw new Error(payload?.detail || payload?.title || `Replicate ${startResp.status}`);
+    throw new Error(payload?.detail || payload?.title || payload?.error || `Replicate ${startResp.status}`);
   }
 
-  // Poll if not yet completed.
+  // Poll until terminal status. /api/replicate/status/<id> proxies to
+  // api.replicate.com/v1/predictions/<id>.
   while (payload.status && payload.status !== "succeeded" && payload.status !== "failed" && payload.status !== "canceled") {
     onProgress?.(`SAM ${payload.status}…`);
     await new Promise((r) => setTimeout(r, 1800));
-    const pollUrl = payload.urls?.get;
-    if (!pollUrl) break;
-    const r = await fetch(pollUrl, { headers: { Authorization: `Bearer ${token}` } });
+    if (!payload.id) break;
+    const r = await fetch(`/api/replicate/status/${encodeURIComponent(payload.id)}`, {
+      headers: { "X-Replicate-Token": token }
+    });
     payload = await r.json().catch(() => ({}));
   }
   if (payload.status !== "succeeded") {
-    throw new Error(payload.error || `SAM ${payload.status || "unknown"}`);
+    throw new Error(payload.error || payload.detail || `SAM ${payload.status || "unknown"}`);
   }
 
   const maskUrls = normaliseSamOutput(payload.output);
