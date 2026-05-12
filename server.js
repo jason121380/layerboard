@@ -289,6 +289,60 @@ async function handleCanvasesActivePut(req, res) {
   sendJson(res, 200, { activeCanvasId: id });
 }
 
+// ---------- Replicate proxy (bypasses browser CORS) ----------
+// Client sends X-Replicate-Token; server forwards as Authorization: Bearer.
+// We expose two endpoints so the magic-layer loop can poll without leaking
+// the Replicate base URL into the page.
+function requireReplicateToken(req, res) {
+  const token = req.headers["x-replicate-token"];
+  if (!token) {
+    sendJson(res, 401, { error: "Missing X-Replicate-Token header." });
+    return null;
+  }
+  return token;
+}
+
+async function handleReplicateStart(req, res) {
+  const token = requireReplicateToken(req, res);
+  if (!token) return;
+  const body = await readSyncBody(req, res, MAX_BOARD_BYTES);
+  if (!body) return;
+  const model = String(body.model || "").trim();
+  if (!model || !/^[a-z0-9_-]+\/[a-z0-9._-]+$/i.test(model)) {
+    sendJson(res, 400, { error: "Invalid model identifier." });
+    return;
+  }
+  try {
+    const upstream = await fetch(`https://api.replicate.com/v1/models/${model}/predictions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Prefer: "wait=60"
+      },
+      body: JSON.stringify({ input: body.input || {} })
+    });
+    const payload = await upstream.json().catch(() => ({}));
+    sendJson(res, upstream.status, payload);
+  } catch (err) {
+    sendJson(res, 502, { error: err instanceof Error ? err.message : "Replicate unreachable." });
+  }
+}
+
+async function handleReplicateStatus(req, res, predictionId) {
+  const token = requireReplicateToken(req, res);
+  if (!token) return;
+  try {
+    const upstream = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const payload = await upstream.json().catch(() => ({}));
+    sendJson(res, upstream.status, payload);
+  } catch (err) {
+    sendJson(res, 502, { error: err instanceof Error ? err.message : "Replicate unreachable." });
+  }
+}
+
 async function handleLogGet(req, res) {
   const userId = requireUserId(req, res);
   if (!userId) return;
@@ -516,7 +570,8 @@ const ROUTES = [
   { method: "PUT", path: "/api/usage", handler: handleUsagePut },
   { method: "GET", path: "/api/canvases", handler: handleCanvasesGet },
   { method: "POST", path: "/api/canvases", handler: handleCanvasesPost },
-  { method: "PUT", path: "/api/canvases/active", handler: handleCanvasesActivePut }
+  { method: "PUT", path: "/api/canvases/active", handler: handleCanvasesActivePut },
+  { method: "POST", path: "/api/replicate/start", handler: handleReplicateStart }
 ];
 
 // Pathname comparison strips query string so /api/board?canvasId=… matches.
@@ -539,6 +594,13 @@ const server = http.createServer(async (req, res) => {
       const id = canvasMatch[1];
       if (req.method === "PATCH") { await handleCanvasPatch(req, res, id); return; }
       if (req.method === "DELETE") { await handleCanvasDelete(req, res, id); return; }
+    }
+
+    // Parameterized: /api/replicate/status/<predictionId>  (GET — polling)
+    const repMatch = pathname.match(/^\/api\/replicate\/status\/([A-Za-z0-9]{1,64})$/);
+    if (repMatch && req.method === "GET") {
+      await handleReplicateStatus(req, res, repMatch[1]);
+      return;
     }
 
     if (req.method === "GET") {
