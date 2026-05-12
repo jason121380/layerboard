@@ -15,7 +15,9 @@ import {
   handleBoardPointerDown,
   repositionSelectionBar,
   uploadImage,
-  createItem
+  createItem,
+  copySelectedToClipboard,
+  pasteFromClipboard
 } from "./items.js";
 import { magicLayerSelected, renderLayerPanel } from "./magic-layer.js";
 import { generateImages, exportSelectedItems, saveApiKey } from "./api.js";
@@ -481,6 +483,22 @@ function bindEvents() {
       generateImages({ forceConfirm: true });
       return;
     }
+    // Copy / paste — works across canvases via localStorage. Ignored while
+    // an input/textarea has focus so we don't break the native text clipboard.
+    const inField = document.activeElement?.tagName === "TEXTAREA"
+      || document.activeElement?.tagName === "INPUT"
+      || document.activeElement?.isContentEditable;
+    if ((event.metaKey || event.ctrlKey) && event.key === "c" && !inField && state.selectedIds.size) {
+      event.preventDefault();
+      copySelectedToClipboard();
+      return;
+    }
+    if ((event.metaKey || event.ctrlKey) && event.key === "v" && !inField) {
+      event.preventDefault();
+      pushHistory();
+      pasteFromClipboard();
+      return;
+    }
     if (
       (event.key === "Backspace" || event.key === "Delete") &&
       state.selectedIds.size &&
@@ -542,7 +560,7 @@ async function init() {
   initGridToggle();
   setMixerHeight(state.mixerHeight);
   fitBoard(true);
-  setBoardZoom(state.boardScale); // sync the % label to fitBoard's chosen scale
+  setBoardZoom(0.2); // default initial zoom (overrides fitBoard's auto-fit)
   renderLayerPanel();
   onCanvasSwitch(handleCanvasSwitch);
   initCanvasUi();
