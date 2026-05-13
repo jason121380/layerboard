@@ -113,6 +113,11 @@ async function reloadCloudData() {
 // canvas at each step.
 async function handleCanvasSwitch({ outgoingFlush = false, incomingId = null, progress = null } = {}) {
   if (outgoingFlush) {
+    // If the outgoing canvas still has any base64 data: URLs from before
+    // blob storage, migrate them up to /api/blob FIRST. Otherwise the
+    // PUT /api/board that comes next carries every base64 byte over the
+    // wire, and the user sees "儲存目前畫布…" hang for many seconds.
+    await migrateDataUrlsToBlobs({ progress });
     progress?.update("儲存目前畫布…");
     await flushBoard();
     return;
@@ -163,18 +168,28 @@ async function handleCanvasSwitch({ outgoingFlush = false, incomingId = null, pr
   }
 }
 
-async function migrateDataUrlsToBlobs() {
+async function migrateDataUrlsToBlobs({ progress = null } = {}) {
   const targets = state.items.filter((i) => typeof i.src === "string" && i.src.startsWith("data:"));
   if (!targets.length) return;
-  for (const item of targets) {
+  let done = 0;
+  const total = targets.length;
+  progress?.update(`上傳圖片到雲端 0 / ${total}…`);
+  // Parallel uploads — sequentially-awaited migration on legacy boards was
+  // adding ~1s/image. uploadToBlob already de-dupes parallel requests for
+  // the same data URL, so no risk of double-write.
+  let changed = false;
+  await Promise.all(targets.map(async (item) => {
     const blobUrl = await uploadToBlob(item.src);
     if (blobUrl && blobUrl !== item.src) {
       item.src = blobUrl;
       const img = item.el?.querySelector?.("img");
       if (img) img.src = blobUrl;
-      scheduleAutoSave();
+      changed = true;
     }
-  }
+    done += 1;
+    progress?.update(`上傳圖片到雲端 ${done} / ${total}…`);
+  }));
+  if (changed) scheduleAutoSave();
 }
 
 // ---------- Settings modal (top-right gear + status-chip click) ----------
