@@ -255,11 +255,11 @@ function renderItemContent(item) {
 
   const img = document.createElement("img");
   img.alt = item.caption || "Moodboard image";
-  // Decode off the main thread so large base64 PNGs don't freeze the UI
-  // (especially noticeable when a canvas with many images is loaded on
-  // switch).
+  // Decode off the main thread so large base64 PNGs don't freeze the UI on
+  // switch. Skip loading="lazy" — at 10% default zoom most items are off
+  // the visible viewport, lazy would only fetch on scroll and the user
+  // would see a half-loaded board.
   img.decoding = "async";
-  img.loading = "lazy";
   img.src = item.src;
   img.draggable = false;
   img.style.objectFit = item.fit || "cover";
