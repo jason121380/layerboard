@@ -889,6 +889,53 @@ async function composeMaskedLayer(srcImage, maskUrl, index) {
   };
 }
 
+// Flood-fill from the four corners turning edge-connected near-white pixels
+// transparent. Qwen Image Layered fills "removed" regions with #ffffff (not
+// proper alpha), so the output reads as a white plate around the subject;
+// this rewrites it into a real cutout. We avoid touching white pixels that
+// are isolated in the middle (e.g. a white shirt) by only changing what's
+// reachable from a frame edge.
+async function whiteEdgeToTransparent(url) {
+  const img = await loadImage(url);
+  const canvas = document.createElement("canvas");
+  const w = canvas.width = img.naturalWidth;
+  const h = canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0);
+  let imgData;
+  try {
+    imgData = ctx.getImageData(0, 0, w, h);
+  } catch {
+    // Cross-origin without CORS — bail out, return original URL.
+    return url;
+  }
+  const data = imgData.data;
+  const visited = new Uint8Array(w * h);
+  const threshold = 244; // require R/G/B ≥ 244 to count as background-white
+  // Seed all four edges.
+  const stack = [];
+  for (let x = 0; x < w; x += 1) { stack.push([x, 0], [x, h - 1]); }
+  for (let y = 0; y < h; y += 1) { stack.push([0, y], [w - 1, y]); }
+  while (stack.length) {
+    const [x, y] = stack.pop();
+    if (x < 0 || y < 0 || x >= w || y >= h) continue;
+    const idx = y * w + x;
+    if (visited[idx]) continue;
+    visited[idx] = 1;
+    const p = idx * 4;
+    // Already-transparent pixels are background by definition.
+    if (data[p + 3] === 0) {
+      stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+      continue;
+    }
+    if (data[p] < threshold || data[p + 1] < threshold || data[p + 2] < threshold) continue;
+    data[p + 3] = 0;
+    stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+  }
+  ctx.putImageData(imgData, 0, 0);
+  return canvas.toDataURL("image/png");
+}
+
 async function runSamMode(selected, onProgress) {
   // Misnomer kept to avoid churn elsewhere — now actually drives Qwen Image
   // Layered (see DEFAULT_REPLICATE_MODEL). Qwen returns transparent PNGs of
@@ -944,13 +991,19 @@ async function runSamMode(selected, onProgress) {
   const layerUrls = normaliseSamOutput(payload.output);
   if (!layerUrls.length) throw new Error("Qwen 沒回傳任何圖層");
 
+  // Qwen paints removed regions white instead of using real alpha. Convert
+  // each layer's edge-connected white into transparent pixels before they
+  // land on the canvas.
+  onProgress?.(`套用透明背景 ${layerUrls.length} 個圖層…`);
+  const processedUrls = await Promise.all(layerUrls.map(whiteEdgeToTransparent));
+
   // No compose step — Qwen outputs are already transparent PNGs sized to the
   // source. Just need source dimensions for the placement maths in
   // splitItemIntoLayers.
   const sourceImage = await loadImage(selected.src);
   const sw = sourceImage.naturalWidth;
   const sh = sourceImage.naturalHeight;
-  return layerUrls.slice(0, 12).map((url, i) => ({
+  return processedUrls.slice(0, 12).map((url, i) => ({
     src: url,
     x: 0,
     y: 0,
