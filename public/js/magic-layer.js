@@ -890,14 +890,22 @@ async function composeMaskedLayer(srcImage, maskUrl, index) {
   };
 }
 
-// Flood-fill from the four corners turning edge-connected near-white pixels
-// transparent. Qwen Image Layered fills "removed" regions with #ffffff (not
-// proper alpha), so the output reads as a white plate around the subject;
-// this rewrites it into a real cutout. We avoid touching white pixels that
-// are isolated in the middle (e.g. a white shirt) by only changing what's
-// reachable from a frame edge.
-// Returns { dataUrl, opaqueRatio } so callers can drop layers that ended up
-// nearly empty (Qwen sometimes pads with sparse / noise layers).
+// Flood-fill from the four corners turning edge-connected near-background
+// pixels transparent. Qwen Image Layered fills "removed" regions with a
+// flat colour (usually #ffffff but sometimes off-white because of JPEG /
+// anti-aliased borders), so the output reads as a flat plate around the
+// subject; this rewrites it into a real cutout.
+//
+// The background colour is sampled from the four corners — we adapt to
+// whatever the actual fill is (pure white, ivory, light gray, …) instead
+// of forcing a "must be ≥244 white" threshold that misses anti-aliased
+// edges and tinted output.
+//
+// Inner pixels matching the corner colour (e.g. a white shirt) stay
+// opaque because they aren't reachable from an edge via the flood-fill.
+//
+// Returns { dataUrl, opaqueRatio } so callers can drop layers that ended
+// up nearly empty (Qwen sometimes pads with sparse / noise layers).
 async function whiteEdgeToTransparent(url) {
   const img = await loadImage(url);
   const canvas = document.createElement("canvas");
@@ -912,8 +920,25 @@ async function whiteEdgeToTransparent(url) {
     return { dataUrl: url, opaqueRatio: 1 };
   }
   const data = imgData.data;
+
+  // Sample the four corners and average them; that's our "background" colour.
+  function rgbAt(x, y) {
+    const p = (y * w + x) * 4;
+    return [data[p], data[p + 1], data[p + 2], data[p + 3]];
+  }
+  const corners = [rgbAt(0, 0), rgbAt(w - 1, 0), rgbAt(0, h - 1), rgbAt(w - 1, h - 1)];
+  // If a corner is already transparent, skip it in the average — only use
+  // the actual fill colour.
+  const opaqueCorners = corners.filter((c) => c[3] > 16);
+  const refCorners = opaqueCorners.length ? opaqueCorners : corners;
+  const bg = [
+    refCorners.reduce((s, c) => s + c[0], 0) / refCorners.length,
+    refCorners.reduce((s, c) => s + c[1], 0) / refCorners.length,
+    refCorners.reduce((s, c) => s + c[2], 0) / refCorners.length
+  ];
+  const tolerance = 18; // per-channel — handles JPEG halos / anti-aliased edges
+
   const visited = new Uint8Array(w * h);
-  const threshold = 244;
   const stack = [];
   for (let x = 0; x < w; x += 1) { stack.push([x, 0], [x, h - 1]); }
   for (let y = 0; y < h; y += 1) { stack.push([0, y], [w - 1, y]); }
@@ -924,15 +949,20 @@ async function whiteEdgeToTransparent(url) {
     if (visited[idx]) continue;
     visited[idx] = 1;
     const p = idx * 4;
+    // Already-transparent pixels are background by definition — continue
+    // walking through them.
     if (data[p + 3] === 0) {
       stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
       continue;
     }
-    if (data[p] < threshold || data[p + 1] < threshold || data[p + 2] < threshold) continue;
+    if (
+      Math.abs(data[p] - bg[0]) > tolerance ||
+      Math.abs(data[p + 1] - bg[1]) > tolerance ||
+      Math.abs(data[p + 2] - bg[2]) > tolerance
+    ) continue;
     data[p + 3] = 0;
     stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
   }
-  // Count remaining opaque pixels so we can filter ghost layers.
   let opaque = 0;
   for (let i = 3; i < data.length; i += 4) if (data[i] > 24) opaque += 1;
   const opaqueRatio = opaque / (w * h);
