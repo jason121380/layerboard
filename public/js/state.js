@@ -23,6 +23,8 @@ export const dom = {
   revertBtn: document.querySelector("#revertBtn"),
   promptBtn: document.querySelector("#promptBtn"),
   duplicateBtn: document.querySelector("#duplicateBtn"),
+  bringFrontBtn: document.querySelector("#bringFrontBtn"),
+  sendBackBtn: document.querySelector("#sendBackBtn"),
   exportBtn: document.querySelector("#exportBtn"),
   groupBtn: document.querySelector("#groupBtn"),
   ungroupBtn: document.querySelector("#ungroupBtn"),
