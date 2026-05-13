@@ -84,9 +84,11 @@ export function updateControls() {
     dom.duplicateBtn.textContent = "複製";
   }
   if (dom.exportBtn) {
-    dom.exportBtn.hidden = isMulti;
+    // Visible in both single + multi-select — exportSelectedItems already
+    // composites a multi-item bounding box, no reason to hide it on multi.
+    dom.exportBtn.hidden = false;
     dom.exportBtn.disabled = !hasSelection;
-    dom.exportBtn.textContent = "匯出";
+    dom.exportBtn.textContent = isMulti ? `匯出 (${state.selectedIds.size})` : "匯出";
   }
   // Z-order buttons — active whenever anything is selected (works for both
   // single and multi-select cases).
