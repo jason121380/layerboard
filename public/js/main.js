@@ -10,7 +10,6 @@ import {
   groupSelected,
   ungroupSelected,
   mergeSelected,
-  revertLayer,
   fitBoard,
   handleBoardPointerDown,
   repositionSelectionBar,
@@ -31,6 +30,7 @@ import {
   initCanvases, initCanvasUi, render as renderCanvases,
   onCanvasSwitch, resetCanvasesCache
 } from "./canvases.js";
+import { uploadToBlob } from "./blob.js";
 
 // ---------- Mixer resize ----------
 function handleMixerResizePointerDown(event) {
@@ -127,6 +127,25 @@ async function handleCanvasSwitch({ outgoingFlush = false, incomingId = null } =
       if ((i + 1) % 4 === 0) {
         await new Promise((r) => requestAnimationFrame(r));
       }
+    }
+    // Fire-and-forget: migrate any base64 data URLs left over from before
+    // blob storage onto the server. Each successful migration rewrites
+    // item.src to the tiny URL and schedules an autosave, so next time the
+    // canvas loads from cold storage it's the fast path.
+    migrateDataUrlsToBlobs();
+  }
+}
+
+async function migrateDataUrlsToBlobs() {
+  const targets = state.items.filter((i) => typeof i.src === "string" && i.src.startsWith("data:"));
+  if (!targets.length) return;
+  for (const item of targets) {
+    const blobUrl = await uploadToBlob(item.src);
+    if (blobUrl && blobUrl !== item.src) {
+      item.src = blobUrl;
+      const img = item.el?.querySelector?.("img");
+      if (img) img.src = blobUrl;
+      scheduleAutoSave();
     }
   }
 }
@@ -331,7 +350,6 @@ function initSettingsModal() {
 function bindEvents() {
   dom.generateBtn?.addEventListener("click", () => { pushHistory(); generateImages(); });
   dom.magicBtn?.addEventListener("click", () => { pushHistory(); magicLayerSelected(); });
-  dom.revertBtn?.addEventListener("click", () => { pushHistory(); revertLayer(); });
   dom.duplicateBtn?.addEventListener("click", () => { pushHistory(); duplicateSelected(); });
   dom.bringFrontBtn?.addEventListener("click", () => { pushHistory(); bringSelectedToFront(); });
   dom.sendBackBtn?.addEventListener("click", () => { pushHistory(); sendSelectedToBack(); });

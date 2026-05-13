@@ -35,6 +35,7 @@ import {
 } from "./items.js";
 import { logStart, logEnd } from "./generation-log.js";
 import { recordMagic } from "./usage.js";
+import { uploadToBlob } from "./blob.js";
 
 const MAX_PROCESS_SIDE = 720;
 const KMEANS_SAMPLE_SIZE = 8000;
@@ -1004,7 +1005,12 @@ async function runSamMode(selected, onProgress) {
   // Need ≥ 1% of the canvas covered to count as a useful layer.
   const useful = processed.filter((p) => p.opaqueRatio > 0.01);
   if (!useful.length) throw new Error("Qwen 拆出來的圖層都接近全透明，請改用其他圖或調整圖層數量");
-  const processedUrls = useful.map((p) => p.dataUrl);
+  // Move the in-memory data URLs to blob storage so they don't bloat the
+  // board JSON (and per-canvas switches stay fast).
+  onProgress?.("上傳圖層到雲端…");
+  const processedUrls = await Promise.all(
+    useful.map((p) => uploadToBlob(p.dataUrl))
+  );
 
   // No compose step — Qwen outputs are already transparent PNGs sized to the
   // source. Just need source dimensions for the placement maths in

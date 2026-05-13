@@ -6,6 +6,7 @@ import { state, dom, bumpZ, showToast, getBoardScale, getBoardPoint, applyBoardT
 import { uid, rectFromPoints, intersectsRect, getItemsBounds } from "./utils.js";
 import { renderLayerPanel } from "./magic-layer.js";
 import { scheduleAutoSave } from "./persist.js";
+import { uploadToBlob } from "./blob.js";
 
 // ---------- Selection helpers ----------
 export function getSelectedItems() {
@@ -61,17 +62,14 @@ export function updateControls() {
   const selectedHasGroup = getSelectedItems().some((i) => i.groupId);
 
   const primaryItem = getSelectedItem();
-  const isLayerItem = primaryItem?.type === "layer" && primaryItem?.sourceId;
 
   // Single-select buttons
   if (dom.magicBtn) {
-    dom.magicBtn.hidden = isMulti || isLayerItem;
+    // Available on both raw images AND already-extracted layers — useful for
+    // sub-decomposition (apply Magic Layer to a layer to split it further).
+    dom.magicBtn.hidden = isMulti;
     dom.magicBtn.disabled = editableImages.length === 0;
     if (!dom.magicBtn.classList.contains("is-busy")) dom.magicBtn.textContent = "魔法圖層";
-  }
-  if (dom.revertBtn) {
-    dom.revertBtn.hidden = isMulti || !isLayerItem;
-    dom.revertBtn.disabled = !isLayerItem;
   }
   if (dom.promptBtn) {
     const showPrompt = !isMulti && !!primaryItem?.prompt;
@@ -761,15 +759,17 @@ export function addNote() {
 export function uploadImage(file, x, y) {
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     const src = String(reader.result);
     const img = new Image();
-    img.onload = () => {
+    img.onload = async () => {
       const maxW = 420;
       const scale = Math.min(1, maxW / img.naturalWidth);
+      // Off-load to blob storage so the board JSON only stores a URL.
+      const blobSrc = await uploadToBlob(src);
       createItem({
         type: "image",
-        src,
+        src: blobSrc,
         fit: "contain",
         x: x ?? 180 + Math.random() * 260,
         y: y ?? 140 + Math.random() * 220,

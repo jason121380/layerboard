@@ -20,7 +20,6 @@ export const dom = {
   selectionBar: document.querySelector("#selectionBar"),
   selectedCount: document.querySelector("#selectedCount"),
   magicBtn: document.querySelector("#magicBtn"),
-  revertBtn: document.querySelector("#revertBtn"),
   promptBtn: document.querySelector("#promptBtn"),
   duplicateBtn: document.querySelector("#duplicateBtn"),
   bringFrontBtn: document.querySelector("#bringFrontBtn"),

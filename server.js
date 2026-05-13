@@ -363,6 +363,77 @@ async function handleReplicateStatus(req, res, predictionId) {
   }
 }
 
+// ---------- Blob storage (content-addressed image files) ----------
+// Generated / uploaded images used to live as base64 data URLs inside the
+// board JSON, which made every canvas multi-MB. Pulling the bytes out into
+// dedicated files (hash-named so identical content dedupes) keeps the board
+// JSON tiny — switching canvases is then near-instant even on cold cache.
+const BLOB_NAME_RE = /^[a-f0-9]{32}\.(?:png|jpg|jpeg|webp)$/i;
+const USER_ID_RE = /^[a-f0-9]{32}$/i;
+const BLOB_DATA_URL_RE = /^data:(image\/(png|jpe?g|webp));base64,(.+)$/i;
+
+async function handleBlobPost(req, res) {
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+  const body = await readSyncBody(req, res, MAX_BODY_BYTES);
+  if (!body) return;
+  const match = String(body.data || "").match(BLOB_DATA_URL_RE);
+  if (!match) {
+    sendJson(res, 400, { error: "Expected { data: 'data:image/(png|jpg|webp);base64,…' }" });
+    return;
+  }
+  const mime = match[1];
+  const ext = mime === "image/jpeg" ? "jpg" : mime.split("/")[1];
+  const bytes = Buffer.from(match[3], "base64");
+  const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 32);
+  const blobDir = path.join(userDir(userId), "blobs");
+  const blobPath = path.join(blobDir, `${hash}.${ext}`);
+  try {
+    await mkdir(blobDir, { recursive: true });
+    // Content-addressed: if a file with this hash already exists, skip the
+    // write entirely. Same image generated twice → one file on disk.
+    try {
+      await stat(blobPath);
+    } catch {
+      await writeFile(blobPath, bytes);
+    }
+    sendJson(res, 200, {
+      url: `/api/blob/${userId}/${hash}.${ext}`,
+      bytes: bytes.length
+    });
+  } catch (err) {
+    sendJson(res, 500, { error: err instanceof Error ? err.message : "Blob write failed." });
+  }
+}
+
+async function handleBlobGet(req, res, userIdStr, hashFile) {
+  if (!USER_ID_RE.test(userIdStr) || !BLOB_NAME_RE.test(hashFile)) {
+    res.writeHead(400, { ...SECURITY_HEADERS });
+    res.end("Bad blob path");
+    return;
+  }
+  const blobPath = path.join(userDir(userIdStr), "blobs", hashFile);
+  try {
+    const data = await readFile(blobPath);
+    const ext = path.extname(hashFile).toLowerCase();
+    const contentType = MIME_TYPES[ext] || "application/octet-stream";
+    res.writeHead(200, {
+      "Content-Type": contentType,
+      // Hash-named ⇒ content can never change ⇒ safe to cache forever.
+      "Cache-Control": "public, max-age=31536000, immutable",
+      ...SECURITY_HEADERS
+    });
+    res.end(data);
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      res.writeHead(404, { ...SECURITY_HEADERS });
+      res.end("Blob not found");
+    } else {
+      sendJson(res, 500, { error: err.message });
+    }
+  }
+}
+
 async function handleLogGet(req, res) {
   const userId = requireUserId(req, res);
   if (!userId) return;
@@ -591,7 +662,8 @@ const ROUTES = [
   { method: "GET", path: "/api/canvases", handler: handleCanvasesGet },
   { method: "POST", path: "/api/canvases", handler: handleCanvasesPost },
   { method: "PUT", path: "/api/canvases/active", handler: handleCanvasesActivePut },
-  { method: "POST", path: "/api/replicate/start", handler: handleReplicateStart }
+  { method: "POST", path: "/api/replicate/start", handler: handleReplicateStart },
+  { method: "POST", path: "/api/blob", handler: handleBlobPost }
 ];
 
 // Pathname comparison strips query string so /api/board?canvasId=… matches.
@@ -620,6 +692,13 @@ const server = http.createServer(async (req, res) => {
     const repMatch = pathname.match(/^\/api\/replicate\/status\/([A-Za-z0-9]{1,64})$/);
     if (repMatch && req.method === "GET") {
       await handleReplicateStatus(req, res, repMatch[1]);
+      return;
+    }
+
+    // Parameterized: /api/blob/<userhash>/<contenthash>.<ext>  (GET — serve)
+    const blobMatch = pathname.match(/^\/api\/blob\/([a-f0-9]{32})\/([a-f0-9]{32}\.(?:png|jpg|jpeg|webp))$/i);
+    if (blobMatch && req.method === "GET") {
+      await handleBlobGet(req, res, blobMatch[1], blobMatch[2]);
       return;
     }
 
