@@ -6,7 +6,7 @@
  * exposes CRUD plus rendering of the left-middle list.
  */
 
-import { state, showToast } from "./state.js";
+import { state, showToast, showLoadingProgress } from "./state.js";
 
 let cache = { canvases: [], activeCanvasId: null };
 let initPromise = null;
@@ -102,11 +102,20 @@ export function onCanvasSwitch(fn) { switchHandler = fn; }
 
 async function switchTo(id) {
   if (!id || id === cache.activeCanvasId) return;
-  if (switchHandler) await switchHandler({ outgoingFlush: true });
-  cache.activeCanvasId = id;
-  try { await apiSetActive(id); } catch (err) { console.warn("[canvases] active failed:", err); }
-  if (switchHandler) await switchHandler({ incomingId: id });
-  render();
+  // Immediate feedback — flushBoard can take seconds on a dirty board with
+  // many base64 images, and without a toast the user just sees a frozen UI.
+  const progress = showLoadingProgress("切換畫布中…");
+  try {
+    if (switchHandler) await switchHandler({ outgoingFlush: true });
+    cache.activeCanvasId = id;
+    try { await apiSetActive(id); } catch (err) { console.warn("[canvases] active failed:", err); }
+    if (switchHandler) await switchHandler({ incomingId: id });
+    render();
+    const target = cache.canvases.find((c) => c.id === id);
+    progress.end(`已切換到「${target?.name || "畫布"}」`);
+  } catch (err) {
+    progress.end(`切換失敗：${err.message}`);
+  }
 }
 
 // ---------- Styled modals (replace native prompt/confirm) ----------
