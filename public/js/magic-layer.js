@@ -953,6 +953,15 @@ async function runSamMode(selected, onProgress) {
   const model = /segment-anything/i.test(rawModel) ? DEFAULT_REPLICATE_MODEL : rawModel;
   const numLayers = Number(localStorage.getItem("qwen_num_layers")) || DEFAULT_NUM_LAYERS;
 
+  // Replicate's image input only accepts an HTTPS URL or a data URL — a
+  // relative path like /api/blob/... fails their validator with "does not
+  // match format url". Promote relative paths to the page's origin so
+  // Replicate can reach the blob via our public HTTP route.
+  let imageInput = selected.src;
+  if (imageInput && imageInput.startsWith("/")) {
+    imageInput = new URL(imageInput, window.location.origin).href;
+  }
+
   onProgress?.("Qwen Layered 啟動中…");
   const startResp = await fetch("/api/replicate/start", {
     method: "POST",
@@ -963,7 +972,7 @@ async function runSamMode(selected, onProgress) {
     body: JSON.stringify({
       model,
       input: {
-        image: selected.src,
+        image: imageInput,
         go_fast: true,
         num_layers: numLayers,
         description: "auto",
