@@ -8,6 +8,7 @@ import { createItem, getSelectedItems } from "./items.js";
 import { scheduleAutoSave } from "./persist.js";
 import { recordImages, USD_TO_TWD } from "./usage.js";
 import { logStart, logEnd } from "./generation-log.js";
+import { uploadToBlob } from "./blob.js";
 
 export async function exportSelectedItems() {
   const items = getSelectedItems().filter((i) => i.visible !== false);
@@ -353,7 +354,10 @@ export async function generateImages({ forceConfirm = false } = {}) {
     const baseY = 690 + Math.random() * 360;
     const dims = displayDimsForRatio(aspectRatio);
 
-    for (const src of payload.images || []) {
+    // Stash the base64 bytes server-side first so board JSON only holds URLs.
+    // Done in parallel; falls back to the data URL silently if the upload fails.
+    const blobUrls = await Promise.all((payload.images || []).map(uploadToBlob));
+    for (const src of blobUrls) {
       createItem({
         type: "image",
         src,
