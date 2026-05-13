@@ -111,27 +111,54 @@ async function reloadCloudData() {
 // Called in two phases: { outgoingFlush } before activeCanvasId changes,
 // then { incomingId } after, so persist.js writes/reads against the correct
 // canvas at each step.
-async function handleCanvasSwitch({ outgoingFlush = false, incomingId = null } = {}) {
+async function handleCanvasSwitch({ outgoingFlush = false, incomingId = null, progress = null } = {}) {
   if (outgoingFlush) {
+    progress?.update("儲存目前畫布…");
     await flushBoard();
     return;
   }
   if (incomingId) {
+    progress?.update("讀取畫布資料…");
     clearBoardDom();
     const saved = await loadBoard(incomingId);
+
     // Chunk DOM creation so a 30-image canvas doesn't lock the browser for a
     // full second. Yielding every 4 items keeps interaction responsive while
     // the rest of the board paints in.
+    progress?.update(saved.length ? `建立 ${saved.length} 個項目…` : "切換完成");
     for (let i = 0; i < saved.length; i += 1) {
       createItem({ ...saved[i], select: false });
       if ((i + 1) % 4 === 0) {
         await new Promise((r) => requestAnimationFrame(r));
       }
     }
+
+    // Wait for the actual image bytes to arrive (blob URLs aren't decoded
+    // until the browser fetches them). Surface live "N/Total" in the toast.
+    const imgs = Array.from(dom.board?.querySelectorAll(".board-item img") || []);
+    const total = imgs.length;
+    if (total && progress) {
+      let loaded = 0;
+      progress.update(`載入圖片 0 / ${total}…`);
+      await Promise.all(imgs.map((img) => new Promise((resolve) => {
+        if (img.complete && img.naturalWidth > 0) {
+          loaded += 1;
+          progress.update(`載入圖片 ${loaded} / ${total}…`);
+          return resolve();
+        }
+        const done = () => {
+          loaded += 1;
+          progress.update(`載入圖片 ${loaded} / ${total}…`);
+          resolve();
+        };
+        img.addEventListener("load", done, { once: true });
+        img.addEventListener("error", done, { once: true });
+      })));
+    }
+
     // Fire-and-forget: migrate any base64 data URLs left over from before
-    // blob storage onto the server. Each successful migration rewrites
-    // item.src to the tiny URL and schedules an autosave, so next time the
-    // canvas loads from cold storage it's the fast path.
+    // blob storage. Successful migrations rewrite item.src + schedule
+    // autosave, so the next cold load takes the fast path.
     migrateDataUrlsToBlobs();
   }
 }
@@ -664,11 +691,43 @@ async function init() {
   renderUsage();
   renderCanvases();
 
+  // Initial board: show the same progress flow as a canvas switch so the
+  // user sees "讀取畫布資料…" → "載入圖片 N / Total" instead of an empty
+  // canvas while the network is busy.
   const saved = await loadBoard();
   if (saved.length) {
-    const { createItem } = await import("./items.js");
-    for (const data of saved) createItem({ ...data, select: false });
-    pushHistory();
+    const progress = showLoadingProgress("讀取畫布資料…");
+    try {
+      progress.update(`建立 ${saved.length} 個項目…`);
+      for (let i = 0; i < saved.length; i += 1) {
+        createItem({ ...saved[i], select: false });
+        if ((i + 1) % 4 === 0) await new Promise((r) => requestAnimationFrame(r));
+      }
+      const imgs = Array.from(dom.board?.querySelectorAll(".board-item img") || []);
+      if (imgs.length) {
+        let loaded = 0;
+        progress.update(`載入圖片 0 / ${imgs.length}…`);
+        await Promise.all(imgs.map((img) => new Promise((resolve) => {
+          if (img.complete && img.naturalWidth > 0) {
+            loaded += 1;
+            progress.update(`載入圖片 ${loaded} / ${imgs.length}…`);
+            return resolve();
+          }
+          const done = () => {
+            loaded += 1;
+            progress.update(`載入圖片 ${loaded} / ${imgs.length}…`);
+            resolve();
+          };
+          img.addEventListener("load", done, { once: true });
+          img.addEventListener("error", done, { once: true });
+        })));
+      }
+      pushHistory();
+      progress.end(imgs.length ? `已載入 ${imgs.length} 張圖片` : "畫布就緒");
+    } catch (err) {
+      progress.end(`載入失敗：${err.message}`);
+    }
+    migrateDataUrlsToBlobs();
   }
 }
 

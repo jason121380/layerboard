@@ -102,14 +102,15 @@ export function onCanvasSwitch(fn) { switchHandler = fn; }
 
 async function switchTo(id) {
   if (!id || id === cache.activeCanvasId) return;
-  // Immediate feedback — flushBoard can take seconds on a dirty board with
-  // many base64 images, and without a toast the user just sees a frozen UI.
+  // Immediate feedback — flushBoard can take seconds on a dirty board, and
+  // image fetches on first visit add seconds more. The handler updates this
+  // progress through every step so the user always knows what's happening.
   const progress = showLoadingProgress("切換畫布中…");
   try {
-    if (switchHandler) await switchHandler({ outgoingFlush: true });
+    if (switchHandler) await switchHandler({ outgoingFlush: true, progress });
     cache.activeCanvasId = id;
     try { await apiSetActive(id); } catch (err) { console.warn("[canvases] active failed:", err); }
-    if (switchHandler) await switchHandler({ incomingId: id });
+    if (switchHandler) await switchHandler({ incomingId: id, progress });
     render();
     const target = cache.canvases.find((c) => c.id === id);
     progress.end(`已切換到「${target?.name || "畫布"}」`);
