@@ -17,7 +17,9 @@ import {
   uploadImage,
   createItem,
   copySelectedToClipboard,
-  pasteFromClipboard
+  pasteFromClipboard,
+  bringSelectedToFront,
+  sendSelectedToBack
 } from "./items.js";
 import { magicLayerSelected, renderLayerPanel } from "./magic-layer.js";
 import { generateImages, exportSelectedItems, saveApiKey } from "./api.js";
@@ -331,6 +333,8 @@ function bindEvents() {
   dom.magicBtn?.addEventListener("click", () => { pushHistory(); magicLayerSelected(); });
   dom.revertBtn?.addEventListener("click", () => { pushHistory(); revertLayer(); });
   dom.duplicateBtn?.addEventListener("click", () => { pushHistory(); duplicateSelected(); });
+  dom.bringFrontBtn?.addEventListener("click", () => { pushHistory(); bringSelectedToFront(); });
+  dom.sendBackBtn?.addEventListener("click", () => { pushHistory(); sendSelectedToBack(); });
   dom.groupBtn?.addEventListener("click", () => { pushHistory(); groupSelected(); });
   dom.ungroupBtn?.addEventListener("click", () => { pushHistory(); ungroupSelected(); });
   dom.mergeBtn?.addEventListener("click", () => { pushHistory(); mergeSelected(); });
@@ -458,6 +462,10 @@ function bindEvents() {
   document.querySelector("#zoomInBtn")?.addEventListener("click", () => setBoardZoom(state.boardScale * 1.2));
   document.querySelector("#zoomOutBtn")?.addEventListener("click", () => setBoardZoom(state.boardScale / 1.2));
   document.querySelector("#zoomResetBtn")?.addEventListener("click", () => setBoardZoom(1));
+
+  // Undo / Redo (top-bar icons, parallels the ⌘Z / ⌘⇧Z shortcuts below)
+  document.querySelector("#undoBtn")?.addEventListener("click", undo);
+  document.querySelector("#redoBtn")?.addEventListener("click", redo);
 
   // Mobile / PWA: two-finger pinch zoom on the board frame.
   // The page-level viewport is locked (user-scalable=no), so the browser won't

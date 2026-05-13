@@ -88,6 +88,10 @@ export function updateControls() {
     dom.exportBtn.disabled = !hasSelection;
     dom.exportBtn.textContent = "匯出";
   }
+  // Z-order buttons — active whenever anything is selected (works for both
+  // single and multi-select cases).
+  if (dom.bringFrontBtn) dom.bringFrontBtn.disabled = !hasSelection;
+  if (dom.sendBackBtn) dom.sendBackBtn.disabled = !hasSelection;
 
   // Multi-select buttons
   if (dom.groupBtn) {
@@ -517,6 +521,32 @@ export function handleBoardPointerDown(event) {
 }
 
 // ---------- Bulk operations ----------
+// ---------- Z-order ----------
+export function bringSelectedToFront() {
+  const selected = getSelectedItems().sort((a, b) => a.z - b.z);
+  if (!selected.length) return;
+  for (const item of selected) {
+    item.z = bumpZ();
+    syncItemElement(item);
+  }
+  scheduleAutoSave();
+}
+
+export function sendSelectedToBack() {
+  const selected = getSelectedItems().sort((a, b) => b.z - a.z);
+  if (!selected.length) return;
+  // Find current minimum z across all items, then place selected items below
+  // it (preserving their relative order).
+  const minZ = state.items.reduce((m, i) => Math.min(m, i.z ?? 0), Infinity);
+  let next = minZ - selected.length;
+  for (const item of selected) {
+    item.z = next;
+    next += 1;
+    syncItemElement(item);
+  }
+  scheduleAutoSave();
+}
+
 export function duplicateSelected() {
   const selectedItems = getSelectedItems().sort((a, b) => a.z - b.z);
   if (!selectedItems.length) return;

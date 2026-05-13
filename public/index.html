@@ -19,6 +19,18 @@
         </a>
         <span class="topbar-sep" aria-hidden="true"></span>
         <span id="modelLabel" hidden></span>
+        <button id="undoBtn" class="topbar-icon-btn" type="button" title="復原 (⌘Z)" aria-label="復原">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 7v6h6"/>
+            <path d="M21 17a9 9 0 0 0-15-6.7L3 13"/>
+          </svg>
+        </button>
+        <button id="redoBtn" class="topbar-icon-btn" type="button" title="重做 (⌘⇧Z)" aria-label="重做">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 7v6h-6"/>
+            <path d="M3 17a9 9 0 0 1 15-6.7L21 13"/>
+          </svg>
+        </button>
         <button id="settingsBtn" class="topbar-icon-btn" type="button" title="設定" aria-label="設定">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="3"/>
@@ -189,6 +201,8 @@
         <button id="revertBtn" type="button" disabled>還原圖層</button>
         <button id="promptBtn" type="button" disabled>查看提示詞</button>
         <button id="duplicateBtn" type="button" disabled>複製</button>
+        <button id="bringFrontBtn" type="button" disabled title="移到最上層">上層</button>
+        <button id="sendBackBtn" type="button" disabled title="移到最下層">下層</button>
         <button id="exportBtn" type="button" disabled>匯出</button>
         <!-- multi-select actions -->
         <button id="groupBtn" type="button" disabled>群組</button>
