@@ -633,7 +633,11 @@ async function init() {
   initSettingsModal();
   setMixerHeight(state.mixerHeight);
   fitBoard(true);
-  setBoardZoom(0.2); // default initial zoom (overrides fitBoard's auto-fit)
+  // Default view on every open: 10% zoom, pan reset so the board's centre
+  // crosshair sits in the middle of the viewport.
+  state.boardPanX = 0;
+  state.boardPanY = 0;
+  setBoardZoom(0.1);
   renderLayerPanel();
   onCanvasSwitch(handleCanvasSwitch);
   initCanvasUi();

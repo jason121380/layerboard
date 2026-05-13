@@ -50,7 +50,7 @@ const OCR_MIN_CONFIDENCE = 55;
 // localStorage.replicate_model.
 const REPLICATE_API = "https://api.replicate.com/v1";
 const DEFAULT_REPLICATE_MODEL = "qwen/qwen-image-layered";
-const DEFAULT_NUM_LAYERS = 4;
+const DEFAULT_NUM_LAYERS = 2;
 
 // ====================================================================
 // Shared helpers
@@ -895,6 +895,8 @@ async function composeMaskedLayer(srcImage, maskUrl, index) {
 // this rewrites it into a real cutout. We avoid touching white pixels that
 // are isolated in the middle (e.g. a white shirt) by only changing what's
 // reachable from a frame edge.
+// Returns { dataUrl, opaqueRatio } so callers can drop layers that ended up
+// nearly empty (Qwen sometimes pads with sparse / noise layers).
 async function whiteEdgeToTransparent(url) {
   const img = await loadImage(url);
   const canvas = document.createElement("canvas");
@@ -906,13 +908,11 @@ async function whiteEdgeToTransparent(url) {
   try {
     imgData = ctx.getImageData(0, 0, w, h);
   } catch {
-    // Cross-origin without CORS — bail out, return original URL.
-    return url;
+    return { dataUrl: url, opaqueRatio: 1 };
   }
   const data = imgData.data;
   const visited = new Uint8Array(w * h);
-  const threshold = 244; // require R/G/B ≥ 244 to count as background-white
-  // Seed all four edges.
+  const threshold = 244;
   const stack = [];
   for (let x = 0; x < w; x += 1) { stack.push([x, 0], [x, h - 1]); }
   for (let y = 0; y < h; y += 1) { stack.push([0, y], [w - 1, y]); }
@@ -923,7 +923,6 @@ async function whiteEdgeToTransparent(url) {
     if (visited[idx]) continue;
     visited[idx] = 1;
     const p = idx * 4;
-    // Already-transparent pixels are background by definition.
     if (data[p + 3] === 0) {
       stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
       continue;
@@ -932,8 +931,12 @@ async function whiteEdgeToTransparent(url) {
     data[p + 3] = 0;
     stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
   }
+  // Count remaining opaque pixels so we can filter ghost layers.
+  let opaque = 0;
+  for (let i = 3; i < data.length; i += 4) if (data[i] > 24) opaque += 1;
+  const opaqueRatio = opaque / (w * h);
   ctx.putImageData(imgData, 0, 0);
-  return canvas.toDataURL("image/png");
+  return { dataUrl: canvas.toDataURL("image/png"), opaqueRatio };
 }
 
 async function runSamMode(selected, onProgress) {
@@ -992,10 +995,16 @@ async function runSamMode(selected, onProgress) {
   if (!layerUrls.length) throw new Error("Qwen 沒回傳任何圖層");
 
   // Qwen paints removed regions white instead of using real alpha. Convert
-  // each layer's edge-connected white into transparent pixels before they
-  // land on the canvas.
+  // each layer's edge-connected white into transparent pixels, then drop
+  // layers that ended up essentially empty (Qwen pads with sparse "ghost"
+  // layers when num_layers is higher than the image actually decomposes
+  // into).
   onProgress?.(`套用透明背景 ${layerUrls.length} 個圖層…`);
-  const processedUrls = await Promise.all(layerUrls.map(whiteEdgeToTransparent));
+  const processed = await Promise.all(layerUrls.map(whiteEdgeToTransparent));
+  // Need ≥ 1% of the canvas covered to count as a useful layer.
+  const useful = processed.filter((p) => p.opaqueRatio > 0.01);
+  if (!useful.length) throw new Error("Qwen 拆出來的圖層都接近全透明，請改用其他圖或調整圖層數量");
+  const processedUrls = useful.map((p) => p.dataUrl);
 
   // No compose step — Qwen outputs are already transparent PNGs sized to the
   // source. Just need source dimensions for the placement maths in
