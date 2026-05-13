@@ -251,6 +251,11 @@ function renderItemContent(item) {
 
   const img = document.createElement("img");
   img.alt = item.caption || "Moodboard image";
+  // Decode off the main thread so large base64 PNGs don't freeze the UI
+  // (especially noticeable when a canvas with many images is loaded on
+  // switch).
+  img.decoding = "async";
+  img.loading = "lazy";
   img.src = item.src;
   img.draggable = false;
   img.style.objectFit = item.fit || "cover";

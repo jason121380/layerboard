@@ -117,7 +117,15 @@ async function handleCanvasSwitch({ outgoingFlush = false, incomingId = null } =
   if (incomingId) {
     clearBoardDom();
     const saved = await loadBoard(incomingId);
-    for (const data of saved) createItem({ ...data, select: false });
+    // Chunk DOM creation so a 30-image canvas doesn't lock the browser for a
+    // full second. Yielding every 4 items keeps interaction responsive while
+    // the rest of the board paints in.
+    for (let i = 0; i < saved.length; i += 1) {
+      createItem({ ...saved[i], select: false });
+      if ((i + 1) % 4 === 0) {
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+    }
   }
 }
 
