@@ -967,15 +967,11 @@ async function runSamMode(selected, onProgress) {
 async function runForMode(selected, mode) {
   if (mode === "sam") return runSamMode(selected, (msg) => ocrProgressHook?.(msg));
   if (mode === "auto") {
-    // Auto picks the Replicate path (Qwen Image Layered) when a token is set,
-    // otherwise falls back to the local OCR + saliency pipeline.
+    // When Replicate is configured, that's the chosen path — don't drag the
+    // user into a 10MB Tesseract download on a transient Qwen failure. Let
+    // the error surface so they can retry / change settings instead.
     if (getReplicateToken()) {
-      try {
-        return await runSamMode(selected, (msg) => ocrProgressHook?.(msg));
-      } catch (err) {
-        console.warn("[magic-layer] Replicate failed, falling back:", err.message);
-        ocrProgressHook?.(`Qwen 失敗，改用本地演算法（${err.message}）`);
-      }
+      return runSamMode(selected, (msg) => ocrProgressHook?.(msg));
     }
     return runAutoMode(selected);
   }
@@ -1050,9 +1046,11 @@ export async function magicLayerSelected() {
   }
 
   const mode = state.layerMode || "auto";
-  const firstRun = mode === "auto" && !window.Tesseract;
+  // Only auto mode without Replicate ends up using the local OCR pipeline, so
+  // the "downloading 10 MB" toast was misleading whenever Qwen was driving.
+  const willUseOcr = mode === "auto" && !getReplicateToken() && !window.Tesseract;
   const progress = showLoadingProgress(
-    firstRun ? "OCR 首次啟動：下載引擎 + 字典約 10–15 MB…" : "拆解圖層中…"
+    willUseOcr ? "OCR 首次啟動：下載引擎 + 字典約 10–15 MB…" : "拆解圖層中…"
   );
   setOcrProgressHook((label) => progress.update(label));
 
